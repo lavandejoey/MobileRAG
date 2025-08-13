@@ -45,11 +45,11 @@
 
 # Phase 3 — Ingestion: scan & chunk (`core/ingest`)
 
-* [ ] Implement `scan()` (sha256, mtime; images add pHash)
+* [x] Implement `scan()` (sha256, mtime; images add pHash)
   **DoD:** Produces a list of `IngestItem` with stable hashes.
   **Verify:** Unit test rescans and diffs = Ø.
 
-* [ ] Implement `chunk()` for text/PDF (Unstructured + PyMuPDF)
+* [x] Implement `chunk()` for text/PDF (Unstructured + PyMuPDF)
   **DoD:** Each chunk has `file://...#page`, optional `bbox`, `lang`.
   **Verify:** Integration test on `data/samples/` yields non-empty chunks.
 
