@@ -25,3 +25,4 @@ sudo apt-get install build-essential python3-dev git \
 ## Dev Log
 
 - **2025-08-13:** Completed Phase 0: Project skeleton & CI.
+- **2025-08-13:** Verified Phase 1: Config & device resolver. Fixed warnings.

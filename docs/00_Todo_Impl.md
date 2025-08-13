@@ -19,11 +19,11 @@
 
 # Phase 1 — Config & device resolver (`core/config`)
 
-* [ ] Implement `Settings` (Pydantic) and `device_resolver()`
+* [x] Implement `Settings` (Pydantic) and `device_resolver()`
   **DoD:** Returns `{"llm":cuda/cpu,"reranker":cuda/cpu,"embed":cuda/cpu}` deterministically.
   **Verify:** Unit tests simulate VRAM 6 GB / 0 GB and assert routing.
 
-* [ ] Add token counter util (tiktoken or transformers length)
+* [x] Add token counter util (tiktoken or transformers length)
   **DoD:** `count_tokens(text)` stable across runs.
   **Verify:** Unit test with fixed strings.
 
