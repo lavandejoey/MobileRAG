@@ -1,0 +1,39 @@
+name: lm312
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.12
+  - scipy
+  - accelerate
+  - numpy
+  - sentencepiece
+  - pydantic
+  - safetensors
+  - transformers
+  - rich
+  - pydantic-settings
+  - tiktoken
+  - bitsandbytes
+  - pytest-cov
+  - python-magic
+  - isort
+  - sse-starlette
+  - fastapi
+  - aiofiles
+  - httpx
+  - black
+  - pytest
+  - ruff
+  - pytest-asyncio
+  - uvicorn
+  - pre-commit
+  - mypy
+  - fastembed
+  - qdrant-client
+  - langgraph
+  - langchain
+  - pymupdf
+  - pillow
+  - imagehash
+prefix: /home/zliu/miniconda3/envs/lm312

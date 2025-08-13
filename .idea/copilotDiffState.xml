@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="CopilotDiffPersistence">
+    <option name="pendingDiffs">
+      <map>
+        <entry key="$PROJECT_DIR$/src/parse_courses_html.py">
+          <value>
+            <PendingDiffInfo>
+              <option name="filePath" value="$PROJECT_DIR$/src/parse_courses_html.py" />
+              <option name="updatedContent" value="import re&#10;import csv&#10;import os&#10;&#10;def parse_html_file(input_path):&#10;    with open(input_path, 'r', encoding='utf-8') as f:&#10;        data = f.read()&#10;    # Remove HTML comment markers to include commented program lists&#10;    data = re.sub(r'&lt;!--|--&gt;', '', data)&#10;    # Pattern to capture each course section starting at &lt;h3&gt; until next &lt;h3&gt; or end&#10;    section_pattern = re.compile(r'&lt;h3 id=&quot;(?P&lt;id&gt;[^&quot;]+)&quot;&gt;(?P&lt;title&gt;.*?)&lt;/h3&gt;(?P&lt;rest&gt;.*?)(?=(&lt;h3|$))', re.DOTALL)&#10;    records = []&#10;    for match in section_pattern.finditer(data):&#10;        title = match.group('title').strip()&#10;        # Extract course full name and code from title&#10;        if title.endswith(')') and '(' in title:&#10;            name_part, code_part = title.rsplit('(', 1)&#10;            course_name = name_part.strip()&#10;            course_code = code_part.rstrip(')').strip()&#10;        else:&#10;            course_name = title&#10;            course_code = ''&#10;        # Find all &lt;li&gt; elements in the rest of the section&#10;        rest = match.group('rest')&#10;        li_pattern = re.compile(r'&lt;li&gt;(.*?)&lt;/li&gt;', re.DOTALL)&#10;        dates_list = [item.strip() for item in li_pattern.findall(rest)]&#10;        records.append({&#10;            'course full name': course_name,&#10;            'course code': course_code,&#10;            'course dates': dates_list&#10;        })&#10;    return records&#10;&#10;&#10;def write_csv(records, output_path):&#10;    # Ensure output directory exists&#10;    os.makedirs(os.path.dirname(output_path), exist_ok=True)&#10;    with open(output_path, 'w', newline='', encoding='utf-8') as csvfile:&#10;        writer = csv.writer(csvfile)&#10;        # Header row&#10;        writer.writerow(['course full name', 'course code', 'course dates'])&#10;        # Write each record, joining multiple dates with a pipe&#10;        for rec in records:&#10;            dates_field = '|'.join(rec['course dates'])&#10;            writer.writerow([rec['course full name'], rec['course code'], dates_field])&#10;&#10;&#10;if __name__ == '__main__':&#10;    import argparse&#10;    parser = argparse.ArgumentParser(description='Parse HTML list info into CSV table')&#10;    parser.add_argument('--input', '-i', default=os.path.join('data', 'raw', 'test', 'temp.html'), help='Path to input HTML file')&#10;    parser.add_argument('--output', '-o', default='courses.csv', help='Path to output CSV file')&#10;    args = parser.parse_args()&#10;    records = parse_html_file(args.input)&#10;    write_csv(records, args.output)&#10;    print(f&quot;Wrote {len(records)} courses to {args.output}&quot;)&#10;" />
+            </PendingDiffInfo>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+</project>
