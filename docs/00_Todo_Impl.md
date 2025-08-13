@@ -57,19 +57,19 @@
 
 # Phase 4 — Embeddings & captions (dense/sparse/image)
 
-* [ ] Text dense embeddings (Qwen3-Embedding-0.6B)
+* [x] Text dense embeddings (Qwen3-Embedding-0.6B)
   **DoD:** Batched inference; outputs 1024-dim arrays; cached.
   **Verify:** Deterministic vectors (tolerance); throughput logged.
 
-* [ ] Text sparse vectors (BM25 + SPLADE++)
+* [x] Text sparse vectors (BM25 + SPLADE++)
   **DoD:** Serialised to Qdrant sparse format.
   **Verify:** Small corpus tf-idf sanity test passes.
 
-* [ ] Image embeddings (OpenCLIP ViT-B/32)
+* [x] Image embeddings (OpenCLIP ViT-B/32)
   **DoD:** 512-dim arrays; cached.
   **Verify:** Same image → same vector.
 
-* [ ] Image captions (BLIP base, EN)
+* [x] Image captions (BLIP base, EN)
   **DoD:** Non-empty captions; stored in payload.
   **Verify:** 3 sample images return sensible short captions.
 

@@ -14,6 +14,7 @@ Pillow==10.3.0
 unstructured[pdf]==0.14.4
 pymupdf==1.24.5
 pdfminer.six==20221105
+fastembed==0.2.7
 
 # Tooling
 ruff==0.4.4

@@ -28,3 +28,5 @@ sudo apt-get install build-essential python3-dev git \
 - **2025-08-13:** Completed Phase 0: Project skeleton & CI.
 - **2025-08-13:** Verified Phase 1: Config & device resolver. Fixed warnings.
 - **2025-08-13:** Completed Phase 2: Qdrant client and collections.
+- **2025-08-13:** Completed Phase 3: Ingestion (scan & chunk).
+- **2025-08-13:** Completed Phase 4: Embeddings & captions.

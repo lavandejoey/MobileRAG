@@ -1,0 +1,24 @@
+# -*- coding: utf-8 -*-
+"""
+@author: LIU Ziyi
+@email: lavandejoey@outlook.com
+@date: 2025/08/13
+@version: 0.4.0
+"""
+
+from typing import List
+
+from core.clip.blip import BLIPCaptioner
+from core.config.settings import Settings
+from core.types import IngestItem
+
+
+class ImageCaptioner:
+    def __init__(self, settings: Settings):
+        self.captioner = BLIPCaptioner(device=settings.device)
+
+    def caption_images(self, ingest_items: List[IngestItem]) -> List[str]:
+        image_paths = [item.path for item in ingest_items if item.modality == "image"]
+        if not image_paths:
+            return []
+        return self.captioner.caption_image(image_paths)
