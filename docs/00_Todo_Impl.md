@@ -153,7 +153,8 @@
 
 # Phase 11 — LangGraph topology (`core/graph`)
 
-* [ ] Wire nodes: `device_resolver → query_normaliser → {history, memory, retriever} → rerank → budget → generator → answer`
+* [ ] Wire nodes:
+  `device_resolver → query_normaliser → {history, memory, retriever} → rerank → budget → generator → answer`
   **DoD:** Graph runs with mocks, then real deps.
   **Verify:** Scenario tests: zh/en; text/image; cross-lingual.
 

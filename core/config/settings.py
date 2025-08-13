@@ -1,3 +1,11 @@
+# -*- coding: utf-8 -*-
+"""
+@author: LIU Ziyi
+@email: lavandejoey@outlook.com
+@date: 2025/08/13
+@version: 0.1.0
+"""
+
 from typing import Literal
 
 from pydantic import Field

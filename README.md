@@ -1,21 +1,22 @@
 # MobileRAG
 
-
 ## Environment Setup
+
 ### 1. Clone the repository
+
 ```bash
 git clone https://github.com/lavandejoey/MobileRAG.git
 cd MobileRAG
 ```
+
 ### 2. Install tools
+
 ```bash
 sudo apt-get update && sudo apt-get install -y
 sudo apt-get install build-essential python3-dev git \
     tesseract-ocr \
     libmagic1
 ```
-
-
 
 ## Documentation
 
@@ -26,3 +27,4 @@ sudo apt-get install build-essential python3-dev git \
 
 - **2025-08-13:** Completed Phase 0: Project skeleton & CI.
 - **2025-08-13:** Verified Phase 1: Config & device resolver. Fixed warnings.
+- **2025-08-13:** Completed Phase 2: Qdrant client and collections.

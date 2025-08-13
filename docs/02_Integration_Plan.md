@@ -127,13 +127,15 @@ Below each module lists: **Interface → Tasks → DoD → Tests**.
 
 ```python
 class Settings(BaseSettings):
-    device: Literal["auto","cpu","cuda:0"]= "auto"
+    device: Literal["auto", "cpu", "cuda:0"] = "auto"
     qdrant_path: str = "./qdrant_db"
     collection_main: str = "rag_multimodal"
     collection_mem: str = "agent_memory"
     dense_dim_text: int = 1024
     dense_dim_image: int = 512
     ...
+
+
 def choose_devices(mem_required: dict) -> Dict[str, torch.device]
 ```
 
@@ -152,10 +154,16 @@ def choose_devices(mem_required: dict) -> Dict[str, torch.device]
 
 ```python
 class Point(BaseModel):
-    id: str; vectors: Dict[str, Any]; payload: Dict[str, Any]
+    id: str;
+    vectors: Dict[str, Any];
+    payload: Dict[str, Any]
+
+
 class VecDB:
     def create_collections(): ...
+
     def upsert(points: List[Point]): ...
+
     def hybrid_query(q_dense, q_sparse, filters, topk): ...
 ```
 
@@ -175,14 +183,21 @@ class VecDB:
 
 ```python
 @dataclass
-class IngestItem: path:str; doc_id:str; modality: Literal["text","image"]; meta:dict
+class IngestItem: path: str; doc_id: str; modality: Literal["text", "image"]; meta: dict
+
+
 class Ingestor:
-    def scan(root)->List[IngestItem]
-    def chunk(items)->List[Chunk]             # text/pdf with page/bbox
-    def embed_dense(chunks)->Embeds
-    def embed_sparse(chunks)->SparseEmbeds
-    def caption_images(items)->List[Caption]
-    def upsert(all_vectors, payloads)->None
+    def scan(root) -> List[IngestItem]
+
+        def chunk(items) -> List[Chunk]  # text/pdf with page/bbox
+
+        def embed_dense(chunks) -> Embeds
+
+        def embed_sparse(chunks) -> SparseEmbeds
+
+        def caption_images(items) -> List[Caption]
+
+        def upsert(all_vectors, payloads) -> None
 ```
 
 **Tasks**
@@ -218,7 +233,9 @@ def build_sparse_vectors(texts: List[str]) -> List[SparseVector]
 
 ```python
 def embed_image(paths: List[str]) -> np.ndarray
-def caption_image(paths: List[str]) -> List[str]
+
+
+    def caption_image(paths: List[str]) -> List[str]
 ```
 
 **Tasks**: load models CPU/GPU; batch inference; cache results to sqlite/lmdb.
@@ -233,10 +250,15 @@ def caption_image(paths: List[str]) -> List[str]
 
 ```python
 class HybridQuery(BaseModel):
-    text: Optional[str]; image_path: Optional[str]
-    filters: Optional[dict]; topk_dense:int=60; topk_sparse:int=60
+    text: Optional[str];
+    image_path: Optional[str]
+    filters: Optional[dict];
+    topk_dense: int = 60;
+    topk_sparse: int = 60
+
+
 class HybridRetriever:
-    def search(q: HybridQuery)->List[Candidate]  # merges dense+sparse
+    def search(q: HybridQuery) -> List[Candidate]  # merges dense+sparse
 ```
 
 **Tasks**:
@@ -254,7 +276,7 @@ class HybridRetriever:
 
 ```python
 class Reranker:
-    def rank(query:str, cands: List[Candidate], topr:int=10)->List[Candidate]
+    def rank(query: str, cands: List[Candidate], topr: int = 10) -> List[Candidate]
 ```
 
 **Tasks**: Qwen3-Reranker-0.6B (seq-cls) batched; CPU/GPU selectable.
@@ -269,9 +291,15 @@ class Reranker:
 
 ```python
 def append_message(session_id, role, content, meta) -> MsgID
-def load_recent(session_id, n:int) -> List[Msg]
-def get_or_make_summary(session_id, upto_msg_id)->Summary
-def maybe_compact(session_id)->Optional[Summary]
+
+
+    def load_recent(session_id, n: int) -> List[Msg]
+
+
+    def get_or_make_summary(session_id, upto_msg_id) -> Summary
+
+
+    def maybe_compact(session_id) -> Optional[Summary]
 ```
 
 **Tasks**: tables `chat_messages`, `chat_summaries`; token count; triggers (≥1800 tokens or every 6–8 turns).
@@ -285,9 +313,13 @@ def maybe_compact(session_id)->Optional[Summary]
 **Interface**
 
 ```python
-def mem_retrieve(query:str, tags:List[str])->List[MemCard]   # Hybrid Top-5
-def mem_gate(candidates: List[str])->List[MemCard]           # rule+light LLM
-def mem_upsert(cards: List[MemCard])->None
+def mem_retrieve(query: str, tags: List[str]) -> List[MemCard]  # Hybrid Top-5
+
+
+    def mem_gate(candidates: List[str]) -> List[MemCard]  # rule+light LLM
+
+
+    def mem_upsert(cards: List[MemCard]) -> None
 ```
 
 **Tasks**: `agent_memory` schema; rule-first gate; decay & merge duplicates.
@@ -301,12 +333,17 @@ def mem_upsert(cards: List[MemCard])->None
 **Interface**
 
 ```python
-class Pack(BaseModel): text:str; tokens:int
-def build_context(budget:int, packs: Dict[str, Pack]) -> str
-def generate(prompt, ctx, stop=None)->str
+class Pack(BaseModel): text: str; tokens: int
+
+
+def build_context(budget: int, packs: Dict[str, Pack]) -> str
+
+
+    def generate(prompt, ctx, stop=None) -> str
 ```
 
-**Tasks**: implement **token budgeter** (summary→recent→mem→evidence; multi-stage compression before truncation); Qwen3-1.7B wrapper (bnb 4/8-bit).
+**Tasks**: implement **token budgeter** (summary→recent→mem→evidence; multi-stage compression before truncation);
+Qwen3-1.7B wrapper (bnb 4/8-bit).
 **DoD**: respects budget; never exceeds window; gracefully degrades.
 **Tests**: budget stress tests; OOM guard.
 
@@ -314,7 +351,8 @@ def generate(prompt, ctx, stop=None)->str
 
 ## 1.11 `graph` (LangGraph topology)
 
-**Nodes**: `device_resolver` → `query_normaliser` → (`history_loader/compactor`, `memory_retriever/gate`, `retriever_hybrid`) → `rerank` → `budget_orchestrator` → `generator` → `answer_with_citations`.
+**Nodes**: `device_resolver` → `query_normaliser` → (`history_loader/compactor`, `memory_retriever/gate`,
+`retriever_hybrid`) → `rerank` → `budget_orchestrator` → `generator` → `answer_with_citations`.
 **DoD**: end-to-end path runs with mocks first, then real deps.
 **Tests**: scenario tests (zh/en, text/image queries).
 
@@ -400,23 +438,30 @@ def generate(prompt, ctx, stop=None)->str
 
 ```python
 class Evidence(BaseModel):
-    file_path:str
-    page: Optional[int]=None
-    bbox: Optional[Tuple[int,int,int,int]]=None
-    caption: Optional[str]=None
-    title: Optional[str]=None
+    file_path: str
+    page: Optional[int] = None
+    bbox: Optional[Tuple[int, int, int, int]] = None
+    caption: Optional[str] = None
+    title: Optional[str] = None
+
+
 class Candidate(BaseModel):
-    id:str; score:float; text:Optional[str]; evidence:Evidence; lang:str; modality:str
+    id: str;
+    score: float;
+    text: Optional[str];
+    evidence: Evidence;
+    lang: str;
+    modality: str
 ```
 
 **Packs for budgeter**
 
 ```python
 class Packs(BaseModel):
-    summary:str
-    recent:str
-    memory:str
-    evidence:str
+    summary: str
+    recent: str
+    memory: str
+    evidence: str
 ```
 
 > All modules depend on DTOs, not on each other’s internals.
@@ -426,7 +471,7 @@ class Packs(BaseModel):
 # 4) Test & Validation Matrix
 
 | Layer          | Test type        | What we assert                                  | Pass criteria          |
-| -------------- | ---------------- | ----------------------------------------------- | ---------------------- |
+|----------------|------------------|-------------------------------------------------|------------------------|
 | Config/Devices | unit             | device routing, OOM fallback                    | stable mapping         |
 | VecDB          | contract         | create/upsert/query idempotent                  | roundtrip OK           |
 | Ingest         | integration      | chunks have anchors; hashes stable              | ≥99% deterministic     |
