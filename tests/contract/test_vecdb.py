@@ -27,7 +27,7 @@ def test_vecdb_roundtrip(settings: Settings):
 
     # 1. Create collections (idempotent)
     vecdb.create_collections()
-    vecdb.create_collections()  # Should not fail
+    vecdb.create_collections()  # Should not fail - test idempotency
 
     # 2. Upsert a point
     doc_id = uuid.uuid4()
@@ -47,9 +47,7 @@ def test_vecdb_roundtrip(settings: Settings):
     )
 
     # 3. Retrieve the point
-    retrieved = vecdb.client.retrieve(
-        collection_name=settings.collection_main, ids=[str(doc_id)]
-    )
+    retrieved = vecdb.client.retrieve(collection_name=settings.collection_main, ids=[str(doc_id)])
     assert len(retrieved) == 1
     assert retrieved[0].payload["lang"] == "en"
 
@@ -57,9 +55,7 @@ def test_vecdb_roundtrip(settings: Settings):
     filtered, _ = vecdb.client.scroll(
         collection_name=settings.collection_main,
         scroll_filter=models.Filter(
-            must=[
-                models.FieldCondition(key="lang", match=models.MatchValue(value="en"))
-            ]
+            must=[models.FieldCondition(key="lang", match=models.MatchValue(value="en"))]
         ),
         limit=10,
     )
@@ -67,9 +63,7 @@ def test_vecdb_roundtrip(settings: Settings):
     assert filtered[0].id == str(doc_id)
 
     # 5. Delete the point
-    vecdb.client.delete(
-        collection_name=settings.collection_main, points_selector=[str(doc_id)]
-    )
+    vecdb.client.delete(collection_name=settings.collection_main, points_selector=[str(doc_id)])
 
     # 6. Verify deletion
     retrieved_after_delete = vecdb.client.retrieve(

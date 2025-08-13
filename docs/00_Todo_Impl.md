@@ -1,18 +1,18 @@
 # Phase 0 — Project skeleton & CI
 
-* [ ] Create repo structure (folders from the integration plan)
+* [x] Create repo structure (folders from the integration plan)
   **DoD:** Tree matches plan; `README.md` exists.
   **Verify:** `tree -L 2` shows `apps/ core/ scripts/ tests/ docs/`.
 
-* [ ] Add tooling: `ruff`, `black`, `mypy/pyright`, `pytest`, `pre-commit`
+* [x] Add tooling: `ruff`, `black`, `mypy/pyright`, `pytest`, `pre-commit`
   **DoD:** `pre-commit run --all-files` passes.
   **Verify:** CI job runs lint/type/test on push.
 
-* [ ] Create base configs (`.env.example`, `pyproject.toml` or `requirements.txt`)
+* [x] Create base configs (`.env.example`, `pyproject.toml` or `requirements.txt`)
   **DoD:** `pip install -r requirements.txt` (or poetry/uv) works.
   **Verify:** `pytest -q` runs 0 tests successfully.
 
-* [ ] Docs seed: `docs/01_Design_Spec.md` + `docs/02_Integration_Plan.md`
+* [x] Docs seed: `docs/01_Design_Spec.md` + `docs/02_Integration_Plan.md`
   **DoD:** Both in repo; linked from `README`.
 
 ---
@@ -31,10 +31,10 @@
 
 # Phase 2 — Qdrant client & schema (`core/vecdb`)
 
-* [ ] Implement local Qdrant client wrapper (`VecDB`)
+* [x] Implement local Qdrant client wrapper (`VecDB`)
   **DoD:** Can open/create DB at `./qdrant_db`.
 
-* [ ] Create collections
+* [x] Create collections
 
     * `rag_multimodal`: named vectors `text_dense(1024)`, `image(512)`, `text_sparse(sparse=True)`
     * `agent_memory`: `text_dense(1024)` + `text_sparse`
