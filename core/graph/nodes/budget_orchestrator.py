@@ -3,13 +3,14 @@
 @author: LIU Ziyi
 @email: lavandejoey@outlook.com
 @date: 2025/08/14
-@version: 0.10.0
+@version: 0.11.0
 """
 
 from typing import Any, Dict, List
+from unittest.mock import Mock
 
 from core.history.compactor import HistoryCompactor
-from core.history.store import HistoryStore
+from core.history.store import ChatHistoryStore as HistoryStore
 from core.memory.store import MemoryStore
 from core.memory.types import QueryResult
 from core.retriever.types import Candidate
@@ -70,6 +71,7 @@ class BudgetOrchestrator:
         query: str,
         retrieved_memories: List[QueryResult],
         retrieved_evidence: List[Candidate],
+        chat_history: List[Dict[str, Any]],
     ) -> Dict[str, Any]:
         """
         Orchestrates the token budget for the prompt.
@@ -103,7 +105,7 @@ class BudgetOrchestrator:
             total_tokens += summary_tokens
 
         # 2. Load recent messages
-        recent_messages = self.history_store.load_messages(session_id, self.recent_message_limit)
+        recent_messages = chat_history
 
         # 3. Budget for evidence
         evidence_content = []
@@ -148,3 +150,33 @@ class BudgetOrchestrator:
             "evidence": evidence_content,
             "total_tokens": total_tokens,
         }
+
+
+history_store = HistoryStore()
+history_compactor = HistoryCompactor()
+memory_store = Mock()
+
+budget_orchestrator = BudgetOrchestrator(
+    model_context_window=8192,
+    summary_token_limit=2048,
+    recent_message_limit=10,
+    memory_token_limit=1024,
+    evidence_token_limit=4096,
+    history_store=history_store,
+    history_compactor=history_compactor,
+    memory_store=memory_store,
+)
+
+
+def budget_orchestrator_node(state):
+    """
+    Orchestrates the token budget for the prompt.
+    """
+    budget = budget_orchestrator.orchestrate_budget(
+        state["session_id"],
+        state["normalized_query"],
+        state["retrieved_memories"],
+        state["reranked_docs"],
+        state["chat_history"],
+    )
+    return {"budget": budget}
