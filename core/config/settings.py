@@ -54,6 +54,9 @@ class Settings(BaseSettings):
     collection_mem: str = Field(
         default="agent_memory", description="Memory collection name in Qdrant"
     )
+    quantization: Literal["none", "4bit", "8bit"] = Field(
+        default="none", description="Quantization level for models"
+    )
     # dense_dim_text: int = Field(
     #     default=1024, description="Dimension of dense text vectors"
     # )
