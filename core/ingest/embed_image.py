@@ -11,16 +11,18 @@ from typing import List
 import numpy as np
 
 from core.clip.openclip import OpenCLIPEmbedder
-from core.config.settings import Settings
 from core.types import IngestItem
 
 
 class ImageEmbedder:
-    def __init__(self, settings: Settings):
-        self.embedder = OpenCLIPEmbedder(device=settings.device)
+    def __init__(self, device: str = "cpu"):
+        self.embedder = OpenCLIPEmbedder(device=device)
 
     def embed_image(self, ingest_items: List[IngestItem]) -> np.ndarray:
         image_paths = [item.path for item in ingest_items if item.modality == "image"]
         if not image_paths:
             return np.array([])
         return self.embedder.embed_image(image_paths)
+
+    def embed_image_query(self, image_path: str) -> List[float]:
+        return self.embedder.embed_image([image_path]).tolist()[0]

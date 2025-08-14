@@ -11,14 +11,14 @@ import uuid
 import pytest
 from qdrant_client import models
 
-from core.config.settings import Settings
+from core.config.settings import Settings, VectorStoreConfig
 from core.vecdb.client import VecDB
 
 
 @pytest.fixture
 def settings(tmp_path) -> Settings:
     """Override settings to use a temporary path for the database."""
-    return Settings(qdrant_path=str(tmp_path / "qdrant_db"))
+    return Settings(vectorstore=VectorStoreConfig(path=str(tmp_path / "qdrant_db")))
 
 
 def test_vecdb_roundtrip(settings: Settings):

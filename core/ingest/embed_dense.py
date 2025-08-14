@@ -9,21 +9,41 @@
 from typing import List
 
 import torch
-from sentence_transformers import SentenceTransformer
+from transformers import AutoModel, AutoTokenizer
 
-from core.config.settings import Settings
 from core.types import Chunk
 
 
 class DenseEmbedder:
-    def __init__(self, settings: Settings):
-        self.settings = settings
-        self.model_name = "Qwen/Qwen3-Embedding-0.6B"
-        self.model = SentenceTransformer(self.model_name, device=settings.device)
+    def __init__(self, device: str = "cpu"):
+        self.model_name = "sentence-transformers/all-MiniLM-L6-v2"
+        self.tokenizer = AutoTokenizer.from_pretrained(
+            self.model_name, trust_remote_code=True, use_fast=False
+        )
+        self.model = AutoModel.from_pretrained(self.model_name, trust_remote_code=True).to(device)
         self.model.eval()  # Set model to evaluation mode
+        self.device = device
 
     @torch.no_grad()
     def embed_dense(self, chunks: List[Chunk]) -> List[List[float]]:
         texts = [chunk.content for chunk in chunks]
-        embeddings = self.model.encode(texts, convert_to_numpy=True, show_progress_bar=False)
-        return embeddings.tolist()
+        # Tokenize the texts
+        inputs = self.tokenizer(texts, padding=True, truncation=True, return_tensors="pt").to(
+            self.device
+        )
+        # Get embeddings
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+        # Mean pooling to get sentence embeddings
+        embeddings = outputs.last_hidden_state.mean(dim=1).cpu().tolist()
+        return embeddings
+
+    @torch.no_grad()
+    def embed_text_query(self, text: str) -> List[float]:
+        inputs = self.tokenizer(text, padding=True, truncation=True, return_tensors="pt").to(
+            self.device
+        )
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+        embedding = outputs.last_hidden_state.mean(dim=1).cpu().tolist()[0]
+        return embedding

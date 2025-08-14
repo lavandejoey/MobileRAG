@@ -20,3 +20,10 @@ class Chunk:
     # Optional fields for text/PDF
     page: Optional[int] = None
     bbox: Optional[tuple[int, int, int, int]] = None
+
+
+@dataclass
+class Message:
+    role: str
+    content: str
+    token_count: int

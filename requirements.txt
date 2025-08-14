@@ -8,13 +8,16 @@ pydantic==2.7.4
 pydantic-settings==2.2.1
 python-dotenv==1.0.1
 tiktoken==0.7.0
-transformers
-sentence-transformers
+transformers==4.40.0
+
 Pillow==10.3.0
 unstructured[pdf]==0.14.4
 pymupdf==1.24.5
 pdfminer.six==20221105
-fastembed==0.2.7
+fastembed==0.7.0
+qdrant-client==1.9.0
+huggingface-hub==0.24.0
+accelerate==0.30.1
 
 # Tooling
 ruff==0.4.4

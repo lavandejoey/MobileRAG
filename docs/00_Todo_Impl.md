@@ -77,27 +77,28 @@
 
 # Phase 5 — Upsert & idempotency
 
-* [ ] Build `upsert()` with key `doc_id#chunk_id#version` + soft delete
+* [x] Build `upsert()` with key `doc_id#chunk_id#version` + soft delete
   **DoD:** Re-ingest produces no duplicates; versioned payload updates.
   **Verify:** Contract test comparing point counts and versions.
 
 * [ ] CLI: `ingest_cli.py scan|embed|upsert`
   **DoD:** Commands run end-to-end on samples.
   **Verify:** Prints summary (#docs, #points), exits 0.
+  **Note:** `upsert` command in CLI currently fails due to `sqlite3.OperationalError` with Qdrant local client. A full Qdrant server is recommended for robust functionality.
 
 ---
 
 # Phase 6 — Hybrid retriever (`core/retriever`)
 
-* [ ] Implement `HybridRetriever.search()`
+* [x] Implement `HybridRetriever.search()`
   **DoD:** Combines dense+sparse via Qdrant Hybrid API; supports filters.
   **Verify:** Returns `Candidate` items with `evidence(file_path, page, caption)`.
 
-* [ ] Image-aware queries (text→image, image→text)
+* [x] Image-aware queries (text→image, image→text)
   **DoD:** If query has image, use image vector; else use text + caption.
   **Verify:** Query “find the flow diagram” returns the expected figure.
 
-* [ ] Quick metrics harness (Recall\@60, nDCG\@10)
+* [x] Quick metrics harness (Recall@60, nDCG@10)
   **DoD:** Baseline metrics computed on tiny labelled set.
   **Verify:** JSON report saved under `tests/artifacts/`.
 
@@ -105,9 +106,9 @@
 
 # Phase 7 — Reranker (`core/reranker`)
 
-* [ ] Qwen3-Reranker-0.6B (seq-cls) batched scoring
+* [x] Qwen3-Reranker-0.6B (seq-cls) batched scoring
   **DoD:** Latency within budget; returns TopR 8–12.
-  **Verify:** nDCG\@10 improves ≥ target over “no rerank”.
+  **Verify:** nDCG@10 improves ≥ target over “no rerank”.
 
 ---
 

@@ -1,3 +1,11 @@
+# -*- coding: utf-8 -*-
+"""
+@author: LIU Ziyi
+@email: lavandejoey@outlook.com
+@date: 2025/08/14
+@version: 0.5.0
+"""
+
 import hashlib
 from pathlib import Path
 from typing import Any, Dict, List

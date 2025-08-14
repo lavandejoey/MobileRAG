@@ -9,13 +9,12 @@
 from typing import List
 
 from core.clip.blip import BLIPCaptioner
-from core.config.settings import Settings
 from core.types import IngestItem
 
 
 class ImageCaptioner:
-    def __init__(self, settings: Settings):
-        self.captioner = BLIPCaptioner(device=settings.device)
+    def __init__(self, device: str = "cpu"):
+        self.captioner = BLIPCaptioner(device=device)
 
     def caption_images(self, ingest_items: List[IngestItem]) -> List[str]:
         image_paths = [item.path for item in ingest_items if item.modality == "image"]
