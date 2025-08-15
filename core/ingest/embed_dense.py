@@ -15,7 +15,7 @@ from core.types import Chunk
 
 
 class DenseEmbedder:
-    def __init__(self, device: str = "cpu"):
+    def __init__(self, device: str):
         self.model_name = "sentence-transformers/all-MiniLM-L6-v2"
         self.tokenizer = AutoTokenizer.from_pretrained(
             self.model_name, trust_remote_code=True, use_fast=False

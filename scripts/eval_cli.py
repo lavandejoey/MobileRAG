@@ -2,24 +2,32 @@
 """
 @author: LIU Ziyi
 @email: lavandejoey@outlook.com
-@date: 2025/08/14
-@version: 0.6.0
+@date: 2025/08/15
+@version: 0.8.0
 """
 
 import argparse
 import json
+import os
+import sys
 from typing import List
-from unittest.mock import Mock
 
 import numpy as np
 
+# Add the project root to the Python path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+
+
+from core.config.devices import resolve_devices
 from core.config.settings import Settings
 from core.ingest.caption import ImageCaptioner
 from core.ingest.embed_dense import DenseEmbedder
 from core.ingest.embed_image import ImageEmbedder
 from core.ingest.embed_sparse import SparseEmbedder
+from core.reranker.reranker import Reranker
 from core.retriever.hybrid import HybridRetriever
-from core.retriever.types import HybridQuery
+from core.retriever.types import Candidate, Evidence, HybridQuery
+from core.vecdb.client import VecDB
 
 
 def calculate_recall_at_k(retrieved_ids: List[str], relevant_ids: List[str], k: int) -> float:
@@ -63,63 +71,44 @@ def main():
         "--topk", type=int, default=60, help="Top K for Recall and nDCG calculation."
     )
 
+    # Rerank command
+    rerank_parser = subparsers.add_parser("rerank", help="Evaluate reranking performance.")
+    rerank_parser.add_argument(
+        "--dataset", type=str, required=True, help="Path to the labelled dataset JSON file."
+    )
+    rerank_parser.add_argument(
+        "--output",
+        type=str,
+        default="rerank_report.json",
+        help="Output JSON file for the rerank report.",
+    )
+    rerank_parser.add_argument(
+        "--topk", type=int, default=10, help="Top K for nDCG calculation after reranking."
+    )
+
     args = parser.parse_args()
 
     settings = Settings()
+    resolved_devices = resolve_devices()
 
-    # Mock VecDB for CLI evaluation due to local client issues
-    mock_vecdb_client = Mock()
-    mock_vecdb_client.search.return_value = [
-        Mock(
-            id="doc1#chunk0#100",
-            score=0.9,
-            payload={
-                "file_path": "/path/to/doc1.txt",
-                "page": 1,
-                "lang": "en",
-                "modality": "text",
-                "content": "This is a test document.",
-            },
-        ),
-        Mock(
-            id="img1#chunk0#200",
-            score=0.8,
-            payload={
-                "file_path": "/path/to/img1.png",
-                "caption": "A black image.",
-                "lang": "en",
-                "modality": "image",
-            },
-        ),
-    ]
-    vecdb = Mock()
-    vecdb.client = mock_vecdb_client
-    vecdb.close = Mock()  # Mock close method
+    # Initialize real components
+    # Use in-memory Qdrant for evaluation CLI to avoid sqlite3.OperationalError
+    vecdb = VecDB(settings, in_memory=True)
+    vecdb.create_collections()  # Ensure collections exist for in-memory DB
 
-    # Mock embedders and captioner instances
-    mock_dense_embedder_instance = Mock(spec=DenseEmbedder)
-    mock_dense_embedder_instance.embed_text_query.return_value = [0.1] * 1024  # Dummy embedding
-
-    mock_image_embedder_instance = Mock(spec=ImageEmbedder)
-    mock_image_embedder_instance.embed_image_query.return_value = [0.2] * 512  # Dummy embedding
-
-    mock_image_captioner_instance = Mock(spec=ImageCaptioner)
-    mock_image_captioner_instance.caption_images.return_value = [
-        "A dummy caption."
-    ]  # Dummy caption
-
-    mock_sparse_embedder_instance = Mock(spec=SparseEmbedder)
-    mock_sparse_embedder_instance.embed_sparse.return_value = [
-        {"indices": [1, 2], "values": [0.1, 0.2]}
-    ]  # Dummy sparse embedding
+    dense_embedder = DenseEmbedder(str(resolved_devices["embed"]))
+    image_embedder = ImageEmbedder(str(resolved_devices["embed"]))
+    image_captioner = ImageCaptioner(str(resolved_devices["embed"]))
+    sparse_embedder = SparseEmbedder()
+    reranker = Reranker(str(resolved_devices["reranker"]))
 
     hybrid_retriever = HybridRetriever(
         settings,
         vecdb,
-        mock_dense_embedder_instance,
-        mock_image_embedder_instance,
-        mock_image_captioner_instance,
-        mock_sparse_embedder_instance,
+        dense_embedder,
+        image_embedder,
+        image_captioner,
+        sparse_embedder,
     )
 
     if args.command == "retrieval":
@@ -175,6 +164,67 @@ def main():
         with open(args.output, "w") as f:
             json.dump(report, f, indent=4)
         print(f"Retrieval report saved to {args.output}")
+
+    elif args.command == "rerank":
+        print(f"Evaluating reranking performance using dataset: {args.dataset}")
+        with open(args.dataset, "r") as f:
+            labelled_dataset = json.load(f)
+
+        total_ndcg = 0.0
+        query_results = []
+
+        for item in labelled_dataset:
+            query_text = item.get("query")
+            # Convert dataset dictionaries to Candidate objects
+            initial_candidates_data = item.get("candidates", [])
+            initial_candidates = [
+                Candidate(
+                    id=c["id"],
+                    text=c.get("text"),
+                    score=c.get("score", 0.0),
+                    evidence=Evidence(
+                        file_path=c["evidence"]["file_path"],
+                        page=c["evidence"].get("page"),
+                        caption=c["evidence"].get("caption"),
+                    ),
+                    lang=c["lang"],
+                    modality=c["modality"],
+                )
+                for c in initial_candidates_data
+            ]
+            relevant_docs = item.get("relevant_docs", [])
+
+            if not query_text:
+                print(f"Skipping item due to missing query: {item}")
+                continue
+
+            reranked_candidates = reranker.rank(query_text, initial_candidates, args.topk)
+            reranked_ids = [c.id for c in reranked_candidates]
+
+            ndcg = calculate_ndcg_at_k(reranked_ids, relevant_docs, args.topk)
+            total_ndcg += ndcg
+
+            query_results.append(
+                {
+                    "query": query_text,
+                    "relevant_docs": relevant_docs,
+                    "initial_candidates_ids": [c.id for c in initial_candidates],
+                    "reranked_ids": reranked_ids,
+                    "ndcg_at_k": ndcg,
+                }
+            )
+
+        avg_ndcg = total_ndcg / len(labelled_dataset) if labelled_dataset else 0.0
+
+        report = {
+            "total_queries": len(labelled_dataset),
+            "average_ndcg_at_k": avg_ndcg,
+            "individual_query_results": query_results,
+        }
+
+        with open(args.output, "w") as f:
+            json.dump(report, f, indent=4)
+        print(f"Rerank report saved to {args.output}")
 
     vecdb.close()
 

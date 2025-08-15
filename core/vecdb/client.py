@@ -17,14 +17,18 @@ from core.vecdb.schema import Point, SparseVector
 class VecDB:
     """A client wrapper for Qdrant vector database."""
 
-    def __init__(self, settings: Settings):
+    def __init__(self, settings: Settings, in_memory: bool = False):
         """
         Initialises the VecDB client.
 
         Args:
             settings: The application settings.
+            in_memory: If True, use an in-memory Qdrant client.
         """
-        self.client = QdrantClient(path=settings.vectorstore.path)
+        if in_memory:
+            self.client = QdrantClient(location=":memory:")
+        else:
+            self.client = QdrantClient(path=settings.vectorstore.path)
         self.settings = settings
 
     def create_collections(self):

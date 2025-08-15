@@ -15,7 +15,7 @@ from core.types import IngestItem
 
 
 class ImageEmbedder:
-    def __init__(self, device: str = "cpu"):
+    def __init__(self, device: str):
         self.embedder = OpenCLIPEmbedder(device=device)
 
     def embed_image(self, ingest_items: List[IngestItem]) -> np.ndarray:

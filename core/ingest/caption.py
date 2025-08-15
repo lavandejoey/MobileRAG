@@ -13,7 +13,7 @@ from core.types import IngestItem
 
 
 class ImageCaptioner:
-    def __init__(self, device: str = "cpu"):
+    def __init__(self, device: str):
         self.captioner = BLIPCaptioner(device=device)
 
     def caption_images(self, ingest_items: List[IngestItem]) -> List[str]:

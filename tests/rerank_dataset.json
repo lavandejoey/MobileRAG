@@ -1,0 +1,23 @@
+[
+    {
+        "query": "What is the capital of France?",
+        "candidates": [
+            {"id": "doc_paris", "text": "Paris is the capital and most populous city of France.", "score": 0.8, "evidence": {"file_path": "/docs/paris.txt"}, "lang": "en", "modality": "text"},
+            {"id": "doc_london", "text": "London is the capital of England and the United Kingdom.", "score": 0.7, "evidence": {"file_path": "/docs/london.txt"}, "lang": "en", "modality": "text"},
+            {"id": "doc_berlin", "text": "Berlin is the capital and largest city of Germany.", "score": 0.6, "evidence": {"file_path": "/docs/berlin.txt"}, "lang": "en", "modality": "text"},
+            {"id": "doc_eiffel", "text": "The Eiffel Tower is a wrought-iron lattice tower on the Champ de Mars in Paris, France.", "score": 0.5, "evidence": {"file_path": "/docs/eiffel.jpg"}, "lang": "en", "modality": "image"},
+            {"id": "doc_france_geo", "text": "France is a country located in Western Europe.", "score": 0.4, "evidence": {"file_path": "/docs/france.txt"}, "lang": "en", "modality": "text"}
+        ],
+        "relevant_docs": ["doc_paris", "doc_eiffel"]
+    },
+    {
+        "query": "Explain photosynthesis.",
+        "candidates": [
+            {"id": "doc_photo_main", "text": "Photosynthesis is the process used by plants, algae, and cyanobacteria to convert light energy into chemical energy.", "score": 0.9, "evidence": {"file_path": "/docs/photosynthesis.txt"}, "lang": "en", "modality": "text"},
+            {"id": "doc_respiration", "text": "Cellular respiration is a set of metabolic reactions and processes that take place in the cells of organisms to convert biochemical energy from nutrients into adenosine triphosphate (ATP).", "score": 0.7, "evidence": {"file_path": "/docs/respiration.txt"}, "lang": "en", "modality": "text"},
+            {"id": "doc_chlorophyll", "text": "Chlorophyll is a green pigment found in cyanobacteria and the chloroplasts of algae and plants.", "score": 0.85, "evidence": {"file_path": "/docs/chlorophyll.txt"}, "lang": "en", "modality": "text"},
+            {"id": "doc_water_cycle", "text": "The water cycle describes the continuous movement of water on, above, and below the surface of the Earth.", "score": 0.3, "evidence": {"file_path": "/docs/water_cycle.txt"}, "lang": "en", "modality": "text"}
+        ],
+        "relevant_docs": ["doc_photo_main", "doc_chlorophyll"]
+    }
+]
