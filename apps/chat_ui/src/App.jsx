@@ -15,15 +15,39 @@ function App() {
   const [evidenceList, setEvidenceList] = useState([]);
   const [memoryList, setMemoryList] = useState([]);
   const [isGenerating, setIsGenerating] = useState(false); // New state for generation status
+  const [backendStatus, setBackendStatus] = useState('checking'); // 'online', 'offline', 'checking'
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  // Effect to scroll to bottom on new messages
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // Effect to check backend status periodically
+  useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const response = await fetch('/api/status');
+        if (response.ok) {
+          const data = await response.json();
+          setBackendStatus(data.status === 'online' ? 'online' : 'offline');
+        } else {
+          setBackendStatus('offline');
+        }
+      } catch (error) {
+        setBackendStatus('offline');
+      }
+    };
+
+    checkStatus(); // Check immediately on mount
+    const intervalId = setInterval(checkStatus, 5000); // Check every 5 seconds
+
+    return () => clearInterval(intervalId); // Cleanup on unmount
+  }, []);
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
@@ -94,10 +118,22 @@ function App() {
     }
   };
 
+  const getStatusColor = () => {
+    switch (backendStatus) {
+      case 'online': return 'green';
+      case 'offline': return 'red';
+      case 'checking': return 'orange';
+      default: return 'gray';
+    }
+  };
+
   return (
     <div className="App">
       <header className="App-header">
-        <h1>MobileRAG Chat</h1>
+        <h1>MobileRAG</h1>
+        <div className="backend-status">
+          <span style={{ color: getStatusColor() }}>●</span> {backendStatus}
+        </div>
       </header>
       <div className="chat-main">
         <div className="chat-container">
@@ -108,8 +144,8 @@ function App() {
               </div>
             ))}
             {isGenerating && (
-              <div className="message assistant generating">
-                Thinking...
+              <div className="generating-spinner-container">
+                <div className="spinner"></div>
               </div>
             )}
             <div ref={messagesEndRef} />
@@ -143,7 +179,7 @@ function App() {
             <ul>
               {memoryList.map((mem, index) => (
                 <li key={index}>{JSON.stringify(mem)}</li> // Display raw JSON for now
-              ))}
+                            ))}
             </ul>
           )}
         </div>
