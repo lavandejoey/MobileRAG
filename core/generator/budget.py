@@ -1,12 +1,13 @@
 # -*- coding: utf-8 -*-
 """
+@file: core/generator/budget.py
 @author: LIU Ziyi
 @email: lavandejoey@outlook.com
 @date: 2025/08/14
 @version: 0.10.0
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from core.history.compactor import HistoryCompactor
 from core.history.store import ChatHistoryStore
@@ -43,7 +44,18 @@ class BudgetOrchestrator:
         query: str,
         retrieved_memories: List[QueryResult],
         retrieved_evidence: List[Candidate],
+        chat_history: Optional[List[Dict[str, Any]]] = None,
     ) -> Dict[str, Any]:
+        """
+        Build a prompt budget within the model context window.
+
+        Returns a dict with:
+        - summary: str
+        - recent_messages: List[str] (message contents only)
+        - memories: List[str] (memory contents)
+        - evidence: List[str] (evidence texts)
+        - total_tokens: int
+        """
         budget_info = {
             "summary": "",
             "recent_messages": [],
@@ -66,47 +78,60 @@ class BudgetOrchestrator:
         remaining_budget = self.model_context_window - budget_info["total_tokens"]
 
         # 3. Add recent messages
-        recent_messages = self.history_store.load_messages(
-            session_id, limit=self.recent_message_limit
+        recent_messages = (
+            chat_history
+            if chat_history is not None
+            else self.history_store.load_messages(session_id, limit=self.recent_message_limit)
         )
         current_recent_tokens = 0
+        final_recent_contents: List[str] = []
         for msg in reversed(recent_messages):  # Add from most recent backwards
-            msg_tokens = count_tokens(f"{msg['role']}: {msg['content']}")
+            # Prefer provided token_count if present
+            msg_content = msg.get("content", "") if isinstance(msg, dict) else str(msg)
+            msg_tokens = (
+                msg.get("token_count", count_tokens(msg_content))
+                if isinstance(msg, dict)
+                else count_tokens(msg_content)
+            )
             if current_recent_tokens + msg_tokens <= remaining_budget:
-                budget_info["recent_messages"].insert(0, msg)  # Add to front to maintain order
+                final_recent_contents.insert(0, msg_content)  # maintain order
                 current_recent_tokens += msg_tokens
             else:
                 break
+        budget_info["recent_messages"] = final_recent_contents
         budget_info["total_tokens"] += current_recent_tokens
         remaining_budget = self.model_context_window - budget_info["total_tokens"]
 
         # 4. Add memories
         current_memory_tokens = 0
+        memory_contents: List[str] = []
         for mem_result in retrieved_memories:
             mem_content = mem_result.memory_card.content
             mem_tokens = count_tokens(mem_content)
             if current_memory_tokens + mem_tokens <= min(remaining_budget, self.memory_token_limit):
-                budget_info["memories"].append(mem_result.memory_card)
+                memory_contents.append(mem_content)
                 current_memory_tokens += mem_tokens
             else:
                 break
+        budget_info["memories"] = memory_contents
         budget_info["total_tokens"] += current_memory_tokens
         remaining_budget = self.model_context_window - budget_info["total_tokens"]
 
-        # 5. Add evidence
+        # 5. Add evidence (reranked docs)
         current_evidence_tokens = 0
+        evidence_contents: List[str] = []
         for evidence_candidate in retrieved_evidence:
-            evidence_text = (
-                evidence_candidate.text
-            )  # Assuming text is the main content for evidence
+            evidence_text = evidence_candidate.text or ""
             evidence_tokens = count_tokens(evidence_text)
             if current_evidence_tokens + evidence_tokens <= min(
                 remaining_budget, self.evidence_token_limit
             ):
-                budget_info["evidence"].append(evidence_candidate)
+                evidence_contents.append(evidence_text)
                 current_evidence_tokens += evidence_tokens
             else:
                 break
+
+        budget_info["evidence"] = evidence_contents
         budget_info["total_tokens"] += current_evidence_tokens
 
         return budget_info

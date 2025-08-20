@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """
+@file: core/retriever/hybrid.py
 @author: LIU Ziyi
 @email: lavandejoey@outlook.com
 @date: 2025/08/14
@@ -51,18 +52,18 @@ class HybridRetriever:
             query_image_embedding = self.image_embedder.embed_image_query(query.image_path)
 
         # Determine the primary query vector
-        final_query_vector = None
+        # final_query_vector = None
+        # Choose which named vector to search against
+        vector_name = None
+        vector = None
         if query_image_embedding is not None:
-            final_query_vector = models.NamedVector(
-                name=self.settings.vectorstore.named_vectors["image"].name,
-                vector=query_image_embedding,
-            )
+            vector_name = self.settings.vectorstore.named_vectors["image"].name
+            vector = query_image_embedding
         elif query_vector is not None:
-            final_query_vector = models.NamedVector(
-                name=self.settings.vectorstore.named_vectors["text_dense"].name, vector=query_vector
-            )
+            vector_name = self.settings.vectorstore.named_vectors["text_dense"].name
+            vector = query_vector
 
-        if final_query_vector is None:
+        if vector is None or vector_name is None:
             return []  # No query vector to search with
 
         # Prepare sparse query for Qdrant
@@ -72,44 +73,64 @@ class HybridRetriever:
         #         indices=query_sparse["indices"], values=query_sparse["values"]
         #     )
 
-        # Perform hybrid search
-        search_results = self.vecdb.client.search(
-            collection_name=self.settings.vectorstore.collection,
-            query_vector=final_query_vector,
-            query_filter=(
-                models.Filter(
-                    must=[
-                        models.FieldCondition(key=k, match=models.MatchValue(value=v))
-                        for k, v in query.filters.items()
-                    ]
-                )
-                if query.filters
-                else None
-            ),
-            limit=query.topk_dense,  # Use topk_dense for limit for now
-            with_payload=True,
-            with_vectors=True,
-            # query_sparse=qdrant_sparse_query if qdrant_sparse_query else None # Pass sparse query
+        # Optional payload filter
+        q_filter = (
+            models.Filter(
+                must=[
+                    models.FieldCondition(key=k, match=models.MatchValue(value=v))
+                    for k, v in (query.filters or {}).items()
+                ]
+            )
+            if query.filters
+            else None
         )
+
+        # Perform search: pass raw vector, and specify which named vector to use
+        resp = self.vecdb.client.query_points(
+            collection_name=self.settings.vectorstore.collection,
+            query=vector,
+            using=vector_name,
+            query_filter=q_filter,
+            limit=getattr(query, "topk_dense", 10),
+            with_payload=True,
+            with_vectors=False,
+        )
+        search_results = resp.points if hasattr(resp, "points") else resp
 
         candidates: List[Candidate] = []
         for hit in search_results:
-            evidence_payload = hit.payload.copy()
-            evidence = Evidence(
-                file_path=evidence_payload.get("file_path"),
-                page=evidence_payload.get("page"),
-                bbox=tuple(evidence_payload["bbox"]) if "bbox" in evidence_payload else None,
-                caption=evidence_payload.get("caption"),
-                title=evidence_payload.get("title"),  # Assuming title might be in payload
+            evidence_payload = hit.payload.copy() or {}
+
+            text = (
+                evidence_payload.get("content")
+                or evidence_payload.get("caption")
+                or evidence_payload.get("ocr_text")
+                or evidence_payload.get("title")
+                or ""
             )
+            fallback_modality = (
+                "image"
+                if vector_name == self.settings.vectorstore.named_vectors["image"].name
+                else "text"
+            )
+
             candidates.append(
                 Candidate(
-                    id=hit.id,
-                    score=hit.score,
-                    text=hit.payload.get("content"),  # Assuming chunk content is stored in payload
-                    evidence=evidence,
-                    lang=hit.payload.get("lang"),
-                    modality=hit.payload.get("modality"),
+                    id=str(hit.id),
+                    score=float(hit.score),
+                    text=text,  # <- key line
+                    evidence=Evidence(
+                        file_path=evidence_payload.get("file_path"),
+                        page=evidence_payload.get("page"),
+                        bbox=(
+                            tuple(evidence_payload["bbox"]) if "bbox" in evidence_payload else None
+                        ),
+                        caption=evidence_payload.get("caption"),
+                        title=evidence_payload.get("title"),
+                    ),
+                    lang=evidence_payload.get("lang") or "und",
+                    modality=evidence_payload.get("modality") or fallback_modality,
                 )
             )
+
         return candidates

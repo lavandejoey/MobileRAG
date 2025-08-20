@@ -1,7 +1,17 @@
+from unittest.mock import Mock
+
 import fitz  # PyMuPDF
 import pytest
 
-from core.ingest import Ingestor
+from core.config.settings import Settings
+from core.ingest.chunk import chunk  # Import the original chunk function
+from core.ingest.scan import scan  # Import the original scan function
+from core.vecdb.client import VecDB
+
+
+@pytest.fixture
+def settings():
+    return Settings(device="cpu")
 
 
 @pytest.fixture
@@ -29,33 +39,43 @@ def sample_data_dir(tmp_path):
     return sample_dir
 
 
-def test_chunk_integration(sample_data_dir):
-    ingestor = Ingestor()
+def test_chunk_integration(sample_data_dir, settings):
+    mock_vecdb = Mock(spec=VecDB)
+    mock_vecdb.create_collections.return_value = None
+
+    # dense_embedder = DenseEmbedder(settings.device)
+    # image_embedder = ImageEmbedder(settings.device)
+    # image_captioner = ImageCaptioner(settings.device)
+    # sparse_embedder = SparseEmbedder()
+
+    # We are testing the chunk function directly, not the full pipeline run
+    # The IngestPipeline.run() method calls chunk internally.
+    # For this test, we want to isolate the chunk functionality.
 
     # Scan the sample data directory
-    ingest_items = ingestor.scan(str(sample_data_dir))
+    ingest_items = scan(str(sample_data_dir))
 
     # Filter out image files for chunking, as chunking currently only handles text/PDF
     text_pdf_items = [item for item in ingest_items if item.modality == "text"]
 
     # Chunk the scanned items
-    chunks = ingestor.chunk(text_pdf_items)
+    chunks = chunk(text_pdf_items)
 
     # Assert that non-empty chunks are produced
     assert len(chunks) > 0
 
     # Assert that chunks have expected attributes
-    for chunk in chunks:
-        assert isinstance(chunk.doc_id, str)
-        assert isinstance(chunk.chunk_id, str)
-        assert isinstance(chunk.content, str)
-        assert len(chunk.content) > 0
-        assert isinstance(chunk.lang, str)
-        assert isinstance(chunk.meta, dict)
+    for c in chunks:
+        assert isinstance(c.doc_id, str)
+        assert isinstance(c.chunk_id, str)
+        assert isinstance(c.content, str)
+        assert len(c.content) > 0
+        assert isinstance(c.lang, str)
+        assert isinstance(c.meta, dict)
 
-        if "sample.pdf" in chunk.meta["file_path"]:
-            assert chunk.page is not None
-            assert chunk.page >= 0
+        if "sample.pdf" in c.meta["file_path"]:
+            assert c.page is not None
+            assert c.page >= 0
             # bbox might be None if unstructured doesn't provide it for simple text
             # assert chunk.bbox is not None # This might be too strict for simple text
 

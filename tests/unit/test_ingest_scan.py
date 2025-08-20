@@ -1,6 +1,15 @@
+from unittest.mock import Mock
+
 import pytest
 
-from core.ingest import Ingestor
+from core.config.settings import Settings
+from core.ingest.scan import scan  # Import the original scan function
+from core.vecdb.client import VecDB
+
+
+@pytest.fixture
+def settings():
+    return Settings(device="cpu")
 
 
 @pytest.fixture
@@ -21,26 +30,36 @@ def temp_ingest_dir(tmp_path):
     return tmp_path
 
 
-def test_scan_stability(temp_ingest_dir):
-    ingestor = Ingestor()
+def test_scan_stability(temp_ingest_dir, settings):
+    mock_vecdb = Mock(spec=VecDB)
+    mock_vecdb.create_collections.return_value = None
+
+    # dense_embedder = DenseEmbedder(settings.device)
+    # image_embedder = ImageEmbedder(settings.device)
+    # image_captioner = ImageCaptioner(settings.device)
+    # sparse_embedder = SparseEmbedder()
+
+    # We are testing the scan function directly, not the full pipeline run
+    # The IngestPipeline.run() method calls scan internally.
+    # For this test, we want to isolate the scan functionality.
 
     import time
 
     # First scan
-    items1 = ingestor.scan(str(temp_ingest_dir))
+    items1 = scan(str(temp_ingest_dir))
 
     # Add a small delay to ensure mtime changes
     time.sleep(0.1)
 
     # Second scan without changes
-    items2 = ingestor.scan(str(temp_ingest_dir))
+    items2 = scan(str(temp_ingest_dir))
 
     # Assert that the number of items is the same
     assert len(items1) == len(items2)
 
     # Sort items by path for consistent comparison
-    items1_sorted = sorted(items1, key=lambda x: x.path)
-    items2_sorted = sorted(items2, key=lambda x: x.path)
+    items1_sorted = sorted(items1, key=lambda x: x.local_path)
+    items2_sorted = sorted(items2, key=lambda x: x.local_path)
 
     # Compare all attributes of IngestItem, especially hashes and mtime
     for i in range(len(items1_sorted)):
@@ -59,14 +78,14 @@ def test_scan_stability(temp_ingest_dir):
 
     # Verify that adding a new file changes the scan result
     (temp_ingest_dir / "text_files" / "doc3.txt").write_text("New document.")
-    items3 = ingestor.scan(str(temp_ingest_dir))
+    items3 = scan(str(temp_ingest_dir))
     assert len(items3) == len(items1) + 1
 
     # Verify that modifying a file changes its hash and mtime
     time.sleep(0.1)  # Ensure mtime changes
     (temp_ingest_dir / "text_files" / "doc1.txt").write_text("This is document 1 updated.")
-    items4 = ingestor.scan(str(temp_ingest_dir))
-    items4_sorted = sorted(items4, key=lambda x: x.path)
+    items4 = scan(str(temp_ingest_dir))
+    items4_sorted = sorted(items4, key=lambda x: x.local_path)
 
     # Find the modified item
     modified_item1 = next(item for item in items1_sorted if "doc1.txt" in item.path)

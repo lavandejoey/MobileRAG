@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 """
+@file: core/history/store.py
 @author: LIU Ziyi
 @email: lavandejoey@outlook.com
 @date: 2025/08/14
 @version: 0.8.0
 """
 
+import json
 import sqlite3
 from typing import Any, Dict, List, Optional
 
@@ -27,6 +29,7 @@ class ChatHistoryStore:
                 role TEXT NOT NULL,
                 content TEXT NOT NULL,
                 token_count INTEGER NOT NULL,
+                evidence_json TEXT,  -- New column for serialized evidence
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(session_id, turn_id)
             )
@@ -48,14 +51,22 @@ class ChatHistoryStore:
         conn.close()
 
     def append_message(
-        self, session_id: str, turn_id: int, role: str, content: str, token_count: int
+        self,
+        session_id: str,
+        turn_id: int,
+        role: str,
+        content: str,
+        token_count: int,
+        evidence: Optional[List[Dict[str, Any]]] = None,
     ):
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
+        evidence_json = json.dumps(evidence) if evidence is not None else None
         cursor.execute(
-            "INSERT INTO chat_messages (session_id, turn_id, role, content, token_count) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (session_id, turn_id, role, content, token_count),
+            "INSERT INTO chat_messages "
+            "(session_id, turn_id, role, content, token_count, evidence_json) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (session_id, turn_id, role, content, token_count, evidence_json),
         )
         conn.commit()
         conn.close()
@@ -64,7 +75,7 @@ class ChatHistoryStore:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         query = (
-            "SELECT session_id, turn_id, role, content, token_count, timestamp "
+            "SELECT session_id, turn_id, role, content, token_count, evidence_json, timestamp "
             "FROM chat_messages WHERE session_id = ? ORDER BY turn_id ASC"
         )
         params = [session_id]
@@ -74,6 +85,7 @@ class ChatHistoryStore:
         cursor.execute(query, params)
         messages = []
         for row in cursor.fetchall():
+            evidence = json.loads(row[5]) if row[5] else None
             messages.append(
                 {
                     "session_id": row[0],
@@ -81,11 +93,35 @@ class ChatHistoryStore:
                     "role": row[2],
                     "content": row[3],
                     "token_count": row[4],
-                    "timestamp": row[5],
+                    "evidence": evidence,
+                    "timestamp": row[6],
                 }
             )
         conn.close()
         return messages
+
+    def get_message_by_turn_id(self, session_id: str, turn_id: int) -> Optional[Dict[str, Any]]:
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT session_id, turn_id, role, content, token_count, evidence_json, timestamp "
+            "FROM chat_messages WHERE session_id = ? AND turn_id = ?",
+            (session_id, turn_id),
+        )
+        row = cursor.fetchone()
+        conn.close()
+        if row:
+            evidence = json.loads(row[5]) if row[5] else None
+            return {
+                "session_id": row[0],
+                "turn_id": row[1],
+                "role": row[2],
+                "content": row[3],
+                "token_count": row[4],
+                "evidence": evidence,
+                "timestamp": row[6],
+            }
+        return None
 
     def get_last_turn_id(self, session_id: str) -> Optional[int]:
         conn = sqlite3.connect(self.db_path)

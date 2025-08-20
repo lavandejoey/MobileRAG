@@ -1,85 +1,85 @@
 # -*- coding: utf-8 -*-
 """
+@file: core/ingest/upsert.py
 @author: LIU Ziyi
 @email: lavandejoey@outlook.com
 @date: 2025/08/14
-@version: 0.5.0
+@version: 0.14.0
 """
 
 import uuid
-from typing import Any, Dict, List
+from typing import Protocol
 
 import numpy as np
+from qdrant_client import models
 
-from core.config.settings import Settings
-from core.types import Chunk, IngestItem
+from core.ingest.pipeline import IngestPipeline
 from core.vecdb.client import VecDB
 from core.vecdb.schema import Point
 
 
-class Upserter:
-    def __init__(self, vecdb: VecDB, settings: Settings):
-        self.vecdb = vecdb
-        self.settings = settings
+class Upsert(Protocol):
+    def __call__(self, user_id: str, collection_name: str, file_path: str) -> None: ...
 
-    def upsert(
-        self,
-        chunks: List[Chunk],
-        dense_embeddings: List[List[float]],
-        sparse_embeddings: List[Dict[str, Any]],
-        image_embeddings: np.ndarray,
-        ingest_items: List[IngestItem],
-        captions: List[str],
-    ) -> None:
-        points: List[Point] = []
-        # Assuming a 1:1 mapping between chunks/ingest_items and their embeddings/captions \
-        # for simplicity
-        # In a real scenario, you might need more complex mapping or filtering
 
-        # Create a map for image embeddings and captions by doc_id/path for easier lookup
-        image_data_map = {}
-        for i, item in enumerate(ingest_items):
-            if item.modality == "image":
-                image_data_map[item.doc_id] = {
-                    "embedding": image_embeddings[i] if image_embeddings.size > 0 else None,
-                    "caption": captions[i] if captions else None,
-                }
+def upsert_factory(vecdb_client: VecDB, ingest_pipeline: IngestPipeline) -> Upsert:
+    def _upsert(user_id: str, collection_name: str, file_path: str) -> None:
+        chunks = ingest_pipeline.run(file_path=file_path)
 
-        for i, chunk in enumerate(chunks):
-            vectors = {}
-            payload = chunk.meta.copy()
+        points = []
+        for chunk in chunks:
+            # Construct the unique ID for the point
+            point_id_str = f"{chunk.doc_id}#{chunk.chunk_id}"
+            point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, point_id_str))
 
-            # Add dense text embedding
-            vectors[self.settings.vectorstore.named_vectors["text_dense"].name] = dense_embeddings[
-                i
-            ]
+            # Prepare vectors
+            qdrant_vectors = {}
+            if chunk.dense_vector:
+                vec = np.array(chunk.dense_vector, dtype=np.float32)
+                norm = np.linalg.norm(vec)
+                if norm > 0:
+                    vec = (vec / norm).astype(np.float32)
+                qdrant_vectors[
+                    vecdb_client.settings.vectorstore.named_vectors["text_dense"].name
+                ] = vec.tolist()
+            if chunk.sparse_vector:
+                qdrant_vectors[
+                    vecdb_client.settings.vectorstore.named_vectors["text_sparse"].name
+                ] = models.SparseVector(
+                    indices=chunk.sparse_vector["indices"],
+                    values=chunk.sparse_vector["values"],
+                )
+            if chunk.image_vector:
+                img_vec = np.array(chunk.image_vector, dtype=np.float32)
+                norm = np.linalg.norm(img_vec)
+                if norm > 0:
+                    img_vec = (img_vec / norm).astype(np.float32)
+                qdrant_vectors[vecdb_client.settings.vectorstore.named_vectors["image"].name] = (
+                    img_vec.tolist()
+                )
 
-            # Add sparse text embedding
-            # FastEmbed already returns in Qdrant sparse format
-            # sparse_data = sparse_embeddings[i]
-            # vectors[self.settings.vectorstore.named_vectors["text_sparse"].name] = sparse_data
+            # Prepare payload
+            payload = {
+                "doc_id": chunk.doc_id,
+                "chunk_id": chunk.chunk_id,
+                "content": chunk.content,
+                "lang": chunk.lang,
+                "modality": chunk.modality,
+                "mtime": chunk.meta.get("mtime", 0),
+                "file_path": chunk.meta.get("file_path"),
+                "page": chunk.page,
+                "caption": chunk.caption,
+            }
 
-            # Handle image-related data if the chunk corresponds to an image
-            if payload.get("modality") == "image" and chunk.doc_id in image_data_map:
-                image_data = image_data_map[chunk.doc_id]
-                if image_data["embedding"] is not None:
-                    vectors[self.settings.vectorstore.named_vectors["image"].name] = image_data[
-                        "embedding"
-                    ].tolist()
-                if image_data["caption"] is not None:
-                    payload["caption"] = image_data["caption"]
-
-            # Construct doc_id#chunk_id#version
-            # For now, version can be a timestamp or a simple counter.
-            # Let's use mtime from meta as version.
-            version = payload.get("mtime", 0)  # Use mtime as a simple version for now
-            point_id_base = f"{chunk.doc_id}#{chunk.chunk_id}"
-            point_id = str(
-                uuid.uuid5(uuid.NAMESPACE_URL, point_id_base)
-            )  # Convert to UUID for Qdrant ID
-            payload["version"] = version  # Store version in payload
-
-            points.append(Point(id=point_id, vectors=vectors, payload=payload))
+            points.append(
+                Point(
+                    id=point_id,
+                    vectors=qdrant_vectors,
+                    payload=payload,
+                )
+            )
 
         if points:
-            self.vecdb.upsert(points, collection_name=self.settings.vectorstore.collection)
+            vecdb_client.upsert(points=points, collection_name=collection_name)
+
+    return _upsert

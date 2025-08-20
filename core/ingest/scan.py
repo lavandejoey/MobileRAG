@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """
+@file: core/ingest/scan.py
 @author: LIU Ziyi
 @email: lavandejoey@outlook.com
 @date: 2025/08/14
@@ -47,10 +48,14 @@ def scan(root_dir: str) -> List[IngestItem]:
     ingest_items: List[IngestItem] = []
     root_path = Path(root_dir)
 
-    if not root_path.is_dir():
-        raise ValueError(f"Root directory not found: {root_dir}")
+    if root_path.is_file():
+        files_to_scan = [root_path]
+    elif root_path.is_dir():
+        files_to_scan = list(root_path.rglob("*"))
+    else:
+        raise ValueError(f"Path is not a valid file or directory: {root_dir}")
 
-    for file_path in root_path.rglob("*"):
+    for file_path in files_to_scan:
         if file_path.is_file():
             doc_id = file_path.name  # Simple doc_id for now, can be improved
             modality = "text"

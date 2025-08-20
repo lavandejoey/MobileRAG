@@ -28,6 +28,10 @@ def mock_reranker_model_and_tokenizer():
         "input_ids": torch.tensor([[1, 2, 3]]),
         "attention_mask": torch.tensor([[1, 1, 1]]),
     }
+    mock_tokenizer_instance.items.return_value = {
+        "input_ids": torch.tensor([[1, 2, 3]]),
+        "attention_mask": torch.tensor([[1, 1, 1]]),
+    }.items()  # Mock the items() method
     mock_tokenizer_from_pretrained = Mock(return_value=mock_tokenizer_instance)
 
     mock_model_instance = Mock()
@@ -40,7 +44,7 @@ def mock_reranker_model_and_tokenizer():
 @pytest.fixture
 def reranker(mock_settings, mock_reranker_model_and_tokenizer):
     mock_tokenizer_instance, mock_model_instance = mock_reranker_model_and_tokenizer
-    reranker_instance = Reranker(mock_settings)
+    reranker_instance = Reranker(mock_settings.device)
     reranker_instance.tokenizer = mock_tokenizer_instance
     reranker_instance.model = mock_model_instance
     return reranker_instance

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """
+@file: core/ingest/caption.py
 @author: LIU Ziyi
 @email: lavandejoey@outlook.com
 @date: 2025/08/13
@@ -21,3 +22,7 @@ class ImageCaptioner:
         if not image_paths:
             return []
         return self.captioner.caption_image(image_paths)
+
+    def to(self, device: str):
+        self.captioner.model.to(device)
+        self.captioner.device = device

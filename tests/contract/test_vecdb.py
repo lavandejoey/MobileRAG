@@ -18,7 +18,7 @@ from core.vecdb.client import VecDB
 @pytest.fixture
 def settings(tmp_path) -> Settings:
     """Override settings to use a temporary path for the database."""
-    return Settings(vectorstore=VectorStoreConfig(path=str(tmp_path / "qdrant_db")))
+    return Settings(vectorstore=VectorStoreConfig(local_path=str(tmp_path / "qdrant_db")))
 
 
 def test_vecdb_roundtrip(settings: Settings):
@@ -32,13 +32,13 @@ def test_vecdb_roundtrip(settings: Settings):
     # 2. Upsert a point
     doc_id = uuid.uuid4()
     vecdb.client.upsert(
-        collection_name=settings.collection_main,
+        collection_name=settings.vectorstore.collection,
         points=[
             models.PointStruct(
                 id=str(doc_id),
                 vector={
-                    "text_dense": [0.1] * settings.dense_dim_text,
-                    "image": [0.2] * settings.dense_dim_image,
+                    "text_dense": [0.1] * settings.vectorstore.named_vectors["text_dense"].size,
+                    "image": [0.2] * settings.vectorstore.named_vectors["image"].size,
                 },
                 payload={"lang": "en", "modality": "text", "time": 12345},
             )
@@ -47,13 +47,15 @@ def test_vecdb_roundtrip(settings: Settings):
     )
 
     # 3. Retrieve the point
-    retrieved = vecdb.client.retrieve(collection_name=settings.collection_main, ids=[str(doc_id)])
+    retrieved = vecdb.client.retrieve(
+        collection_name=settings.vectorstore.collection, ids=[str(doc_id)]
+    )
     assert len(retrieved) == 1
     assert retrieved[0].payload["lang"] == "en"
 
     # 4. Filter points
     filtered, _ = vecdb.client.scroll(
-        collection_name=settings.collection_main,
+        collection_name=settings.vectorstore.collection,
         scroll_filter=models.Filter(
             must=[models.FieldCondition(key="lang", match=models.MatchValue(value="en"))]
         ),
@@ -63,11 +65,13 @@ def test_vecdb_roundtrip(settings: Settings):
     assert filtered[0].id == str(doc_id)
 
     # 5. Delete the point
-    vecdb.client.delete(collection_name=settings.collection_main, points_selector=[str(doc_id)])
+    vecdb.client.delete(
+        collection_name=settings.vectorstore.collection, points_selector=[str(doc_id)]
+    )
 
     # 6. Verify deletion
     retrieved_after_delete = vecdb.client.retrieve(
-        collection_name=settings.collection_main, ids=[str(doc_id)]
+        collection_name=settings.vectorstore.collection, ids=[str(doc_id)]
     )
     assert len(retrieved_after_delete) == 0
 

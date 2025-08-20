@@ -24,7 +24,7 @@ from core.vecdb.client import VecDB
 def mock_settings():
     return Settings(
         vectorstore=VectorStoreConfig(
-            path="./mock_qdrant_db",
+            local_path="./mock_qdrant_db",
             collection="rag_multimodal",
             named_vectors={
                 "text_dense": NamedVectorConfig(size=1024, distance="cosine", name="text_dense"),
@@ -38,8 +38,8 @@ def mock_settings():
 @pytest.fixture
 def mock_vecdb_client():
     mock_client = Mock()
-    # Mock the search method to return predefined results
-    mock_client.search.return_value = [
+    # Mock the query_points method to return predefined results
+    mock_client.query_points.return_value = [
         Mock(
             id="doc1#chunk0#100",
             score=0.9,
@@ -126,7 +126,7 @@ def test_hybrid_retriever_text_query(hybrid_retriever, mock_vecdb_client):
     candidates = hybrid_retriever.search(query)
 
     # Assertions for search results
-    mock_vecdb_client.search.assert_called_once()  # Ensure search was called
+    mock_vecdb_client.query_points.assert_called_once()  # Ensure query_points was called
     assert len(candidates) == 2  # Expecting 2 candidates from mock
 
     # Check first candidate (text document)
@@ -144,7 +144,7 @@ def test_hybrid_retriever_image_query(hybrid_retriever, mock_vecdb_client):
     candidates = hybrid_retriever.search(query)
 
     # Assertions for search results
-    mock_vecdb_client.search.assert_called_once()  # Ensure search was called
+    mock_vecdb_client.query_points.assert_called_once()  # Ensure query_points was called
     assert len(candidates) == 2  # Expecting 2 candidates from mock
 
     # Check first candidate (text document)

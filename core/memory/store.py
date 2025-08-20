@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """
+@file: core/memory/store.py
 @author: LIU Ziyi
 @email: lavandejoey@outlook.com
 @date: 2025/08/14
@@ -62,23 +63,30 @@ class MemoryStore:
         query_sparse_data = self.sparse_embedder.embed_sparse([query_text])[0]
 
         # Perform hybrid search on the agent_memory collection
-        search_results = self.vecdb.client.search(
+        search_results = self.vecdb.client.query_points(
             collection_name=self.settings.collection_mem,
-            query_vector=models.NamedVector(
-                name=self.settings.vectorstore.named_vectors["text_dense"].name,
-                vector=query_dense_vector,
-            ),
-            query_sparse=models.SparseVector(
-                indices=query_sparse_data["indices"],
-                values=query_sparse_data["values"],
-            ),
+            prefetch=[
+                models.Prefetch(
+                    query=query_dense_vector,
+                    using=self.settings.vectorstore.named_vectors["text_dense"].name,
+                    limit=top_k,
+                ),
+                models.Prefetch(
+                    query=models.SparseVector(
+                        indices=query_sparse_data["indices"],
+                        values=query_sparse_data["values"],
+                    ),
+                    using=self.settings.vectorstore.named_vectors["text_sparse"].name,
+                    limit=top_k,
+                ),
+            ],
+            query=models.FusionQuery(fusion=models.Fusion.RRF),
             limit=top_k,
             with_payload=True,
-            with_vectors=False,  # No need to retrieve vectors for results
         )
 
         results = []
-        for hit in search_results:
+        for hit in search_results.points:
             results.append(
                 QueryResult(
                     memory_card=MemoryCard.from_payload(hit.payload),

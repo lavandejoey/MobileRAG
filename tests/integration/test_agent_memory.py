@@ -24,7 +24,7 @@ from core.vecdb.client import VecDB
 def mock_settings():
     return Settings(
         vectorstore=VectorStoreConfig(
-            path="./mock_qdrant_db_memory",  # Use a different path for memory store
+            local_path="./mock_qdrant_db_memory",  # Use a different path for memory store
             collection="agent_memory",
             named_vectors={
                 "text_dense": NamedVectorConfig(size=1024, distance="cosine", name="text_dense"),
@@ -38,27 +38,29 @@ def mock_settings():
 @pytest.fixture
 def mock_vecdb_client():
     mock_client = Mock()
-    # Mock the search method to return predefined results
-    mock_client.search.return_value = [
-        Mock(
-            id=str(uuid.uuid5(uuid.NAMESPACE_URL, "fact1")),
-            score=0.9,
-            payload={
-                "id": "fact1",
-                "content": "The sky is blue",
-                "metadata": {"source": "observation"},
-            },
-        ),
-        Mock(
-            id=str(uuid.uuid5(uuid.NAMESPACE_URL, "fact2")),
-            score=0.8,
-            payload={
-                "id": "fact2",
-                "content": "Water is wet",
-                "metadata": {"source": "observation"},
-            },
-        ),
-    ]
+    # Mock the query_points method to return an object with a .points attribute
+    mock_client.query_points.return_value = Mock(
+        points=[
+            Mock(
+                id=str(uuid.uuid5(uuid.NAMESPACE_URL, "fact1")),
+                score=0.9,
+                payload={
+                    "id": "fact1",
+                    "content": "The sky is blue",
+                    "metadata": {"source": "observation"},
+                },
+            ),
+            Mock(
+                id=str(uuid.uuid5(uuid.NAMESPACE_URL, "fact2")),
+                score=0.8,
+                payload={
+                    "id": "fact2",
+                    "content": "Water is wet",
+                    "metadata": {"source": "observation"},
+                },
+            ),
+        ]
+    )
     mock_client.upsert.return_value = None
     mock_client.delete.return_value = None
     mock_client.retrieve.return_value = [
@@ -126,7 +128,7 @@ def test_upsert_memory(memory_store, mock_vecdb_client):
 def test_retrieve_memories(memory_store, mock_vecdb_client):
     query_text = "What is the color of the sky?"
     results = memory_store.retrieve_memories(query_text)
-    mock_vecdb_client.search.assert_called_once()
+    mock_vecdb_client.query_points.assert_called_once()
     assert len(results) == 2
     assert isinstance(results[0], QueryResult)
     assert results[0].memory_card.id == "fact1"

@@ -3,6 +3,48 @@
   <component name="CsvFileAttributes">
     <option name="attributeMap">
       <map>
+        <entry key="\\wsl.localhost\Ubuntu-22.04\home\zliu\data\T2V\prompts\gemini_prompts_1k_10.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\\wsl.localhost\Ubuntu-22.04\home\zliu\data\T2V\prompts\gemini_prompts_1k_3.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\\wsl.localhost\Ubuntu-22.04\home\zliu\data\T2V\prompts\gemini_prompts_1k_4.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\\wsl.localhost\Ubuntu-22.04\home\zliu\data\T2V\prompts\gemini_prompts_1k_5.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\\wsl.localhost\Ubuntu-22.04\home\zliu\data\T2V\prompts\gemini_prompts_1k_6.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="\\wsl.localhost\Ubuntu-22.04\home\zliu\data\T2V\prompts\gemini_prompts_1k_9.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
         <entry key="\\wsl.localhost\Ubuntu-22.04\home\zliu\data\train_videos.csv">
           <value>
             <Attribute>

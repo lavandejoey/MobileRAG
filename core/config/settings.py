@@ -1,15 +1,19 @@
 # -*- coding: utf-8 -*-
 """
+@file: core/config/settings.py
 @author: LIU Ziyi
 @email: lavandejoey@outlook.com
 @date: 2025/08/14
 @version: 0.5.0
 """
 
+from pathlib import Path
 from typing import Dict, Literal, Optional
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+ROOT_DIR = Path(__file__).resolve().parents[2]
 
 
 class NamedVectorConfig(BaseSettings):
@@ -21,7 +25,9 @@ class NamedVectorConfig(BaseSettings):
 
 class VectorStoreConfig(BaseSettings):
     kind: str = Field(default="qdrant_local", description="Type of vector store")
-    path: str = Field(default="./qdrant_db", description="Path to the local vector store database")
+    local_path: str = Field(
+        default=str(ROOT_DIR / "qdrant_db"), description="Path to the local vector store database"
+    )
     collection: str = Field(
         default="rag_multimodal", description="Main collection name in vector store"
     )
@@ -44,22 +50,11 @@ class Settings(BaseSettings):
     vectorstore: VectorStoreConfig = Field(
         default_factory=VectorStoreConfig, description="Vector store configuration"
     )
-    # Remove redundant fields as they are now part of vectorstore
-    # qdrant_path: str = Field(
-    #     default="./qdrant_db", description="Path to the local Qdrant database"
-    # )
-    # collection_main: str = Field(
-    #     default="rag_multimodal", description="Main collection name in Qdrant"
-    # )
     collection_mem: str = Field(
         default="agent_memory", description="Memory collection name in Qdrant"
     )
     quantization: Literal["none", "4bit", "8bit"] = Field(
         default="none", description="Quantization level for models"
     )
-    # dense_dim_text: int = Field(
-    #     default=1024, description="Dimension of dense text vectors"
-    # )
-    # dense_dim_image: int = Field(
-    #     default=512, description="Dimension of dense image vectors"
-    # )
+    dense_dim_text: int = Field(default=1024, description="Dimension of dense text vectors")
+    dense_dim_image: int = Field(default=512, description="Dimension of dense image vectors")

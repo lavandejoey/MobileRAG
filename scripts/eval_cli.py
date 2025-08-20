@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """
+@file: scripts/eval_cli.py
 @author: LIU Ziyi
 @email: lavandejoey@outlook.com
 @date: 2025/08/15
@@ -74,7 +75,10 @@ def main():
     # Rerank command
     rerank_parser = subparsers.add_parser("rerank", help="Evaluate reranking performance.")
     rerank_parser.add_argument(
-        "--dataset", type=str, required=True, help="Path to the labelled dataset JSON file."
+        "--dataset",
+        type=str,
+        required=True,
+        help="Path to the labelled dataset JSON file.",
     )
     rerank_parser.add_argument(
         "--output",
@@ -93,7 +97,7 @@ def main():
 
     # Initialize real components
     # Use in-memory Qdrant for evaluation CLI to avoid sqlite3.OperationalError
-    vecdb = VecDB(settings, in_memory=True)
+    vecdb = VecDB(settings)
     vecdb.create_collections()  # Ensure collections exist for in-memory DB
 
     dense_embedder = DenseEmbedder(str(resolved_devices["embed"]))

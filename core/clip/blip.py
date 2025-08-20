@@ -1,9 +1,10 @@
 # -*- coding: utf-8 -*-
 """
+@file: core/clip/blip.py
 @author: LIU Ziyi
 @email: lavandejoey@outlook.com
 @date: 2025/08/13
-@version: 0.4.0
+@version: 0.13.0
 """
 
 from typing import List
@@ -14,11 +15,11 @@ from transformers import BlipForConditionalGeneration, BlipProcessor
 
 
 class BLIPCaptioner:
-    def __init__(self, device: str = "cpu"):
-        self.processor = BlipProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
-        self.model = BlipForConditionalGeneration.from_pretrained(
-            "Salesforce/blip-image-captioning-base"
-        ).to(device)
+    def __init__(self, device: str = "cpu", use_fast: bool = False):
+        self.model_name = "Salesforce/blip-image-captioning-base"
+        # Explicitly set use_fast to control processor behavior and avoid warnings
+        self.processor = BlipProcessor.from_pretrained(self.model_name, use_fast=use_fast)
+        self.model = BlipForConditionalGeneration.from_pretrained(self.model_name).to(device)
         self.device = device
 
     @torch.no_grad()

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """
+@file: core/vecdb/client.py
 @author: LIU Ziyi
 @email: lavandejoey@outlook.com
 @date: 2025/08/13
@@ -9,6 +10,12 @@
 from typing import List
 
 from qdrant_client import QdrantClient, models
+
+try:
+    # Present in modern qdrant-client; use for robust local detection
+    from qdrant_client.local.qdrant_local import QdrantLocal  # type: ignore
+except Exception:  # pragma: no cover
+    QdrantLocal = None  # fallback if not available
 
 from core.config.settings import Settings
 from core.vecdb.schema import Point, SparseVector
@@ -28,65 +35,70 @@ class VecDB:
         if in_memory:
             self.client = QdrantClient(location=":memory:")
         else:
-            self.client = QdrantClient(path=settings.vectorstore.path)
+            self.client = QdrantClient(path=settings.vectorstore.local_path)
         self.settings = settings
 
     def create_collections(self):
         """Creates the collections in the vector database if they don't exist."""
         # Main collection
         if not self.client.collection_exists(collection_name=self.settings.vectorstore.collection):
-            vectors_config = {}
+            # Split configs into dense and sparse
+            dense_vectors_config: dict[str, models.VectorParams] = {}
+            sparse_vectors_config: dict[str, models.SparseVectorParams] = {}
             for name, config in self.settings.vectorstore.named_vectors.items():
                 if config.sparse:
-                    vectors_config[name] = models.VectorParams(
-                        size=0,  # Qdrant handles sparse vector size
-                        distance=models.Distance.DOT,
-                    )
+                    # Register sparse vector under sparse_vectors_config
+                    sparse_vectors_config[name] = models.SparseVectorParams()
                 else:
-                    vectors_config[name] = models.VectorParams(
+                    dense_vectors_config[name] = models.VectorParams(
                         size=config.size,
                         distance=models.Distance[config.distance.upper()],
                     )
 
             self.client.create_collection(
                 collection_name=self.settings.vectorstore.collection,
-                vectors_config=vectors_config,
+                vectors_config=dense_vectors_config,
+                sparse_vectors_config=sparse_vectors_config if sparse_vectors_config else None,
             )
-            # Payload indices for main collection
-            self.client.create_payload_index(
-                collection_name=self.settings.vectorstore.collection,
-                field_name="lang",
-                field_schema=models.PayloadSchemaType.KEYWORD,
-            )
-            self.client.create_payload_index(
-                collection_name=self.settings.vectorstore.collection,
-                field_name="modality",
-                field_schema=models.PayloadSchemaType.KEYWORD,
-            )
-            self.client.create_payload_index(
-                collection_name=self.settings.vectorstore.collection,
-                field_name="mtime",  # Using mtime for versioning/time-based filtering
-                field_schema=models.PayloadSchemaType.INTEGER,
-            )
+            # Payload indices for main collection (skip when running in-memory/local)
+            is_local = getattr(self.client, "location", None) == ":memory:"
+            if not is_local:
+                self.client.create_payload_index(
+                    collection_name=self.settings.vectorstore.collection,
+                    field_name="lang",
+                    field_schema=models.PayloadSchemaType.KEYWORD,
+                )
+                self.client.create_payload_index(
+                    collection_name=self.settings.vectorstore.collection,
+                    field_name="modality",
+                    field_schema=models.PayloadSchemaType.KEYWORD,
+                )
+                self.client.create_payload_index(
+                    collection_name=self.settings.vectorstore.collection,
+                    field_name="mtime",  # Using mtime for versioning/time-based filtering
+                    field_schema=models.PayloadSchemaType.INTEGER,
+                )
 
         # Memory collection
         if not self.client.collection_exists(collection_name=self.settings.collection_mem):
-            # Assuming memory collection only has text_dense and text_sparse
-            vectors_config = {
+            # Memory collection has dense text and sparse text vectors
+            dense_cfg = {
                 self.settings.vectorstore.named_vectors["text_dense"].name: models.VectorParams(
                     size=self.settings.vectorstore.named_vectors["text_dense"].size,
                     distance=models.Distance[
                         self.settings.vectorstore.named_vectors["text_dense"].distance.upper()
                     ],
-                ),
-                # self.settings.vectorstore.named_vectors["text_sparse"].name: models.VectorParams(
-                #     size=0,
-                #     distance=models.Distance.DOT,
-                # ),
+                )
+            }
+            sparse_cfg = {
+                self.settings.vectorstore.named_vectors[
+                    "text_sparse"
+                ].name: models.SparseVectorParams()
             }
             self.client.create_collection(
                 collection_name=self.settings.collection_mem,
-                vectors_config=vectors_config,
+                vectors_config=dense_cfg,
+                sparse_vectors_config=sparse_cfg,
             )
 
     def upsert(self, points: List[Point], collection_name: str):

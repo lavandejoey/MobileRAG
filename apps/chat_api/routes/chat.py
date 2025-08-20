@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-@author: LIU Ziyi
-@email: lavandejoey@outlook.com
-@date: 2025/08/15
-@version: 0.12.0
+@file: apps/chat_api/routes/chat.py
 """
 
 import asyncio
@@ -16,6 +13,7 @@ from starlette.responses import StreamingResponse
 from core.graph.topology import create_graph
 
 router = APIRouter()
+graph = create_graph()
 
 
 class ChatRequest(BaseModel):
@@ -23,34 +21,79 @@ class ChatRequest(BaseModel):
     session_id: str
 
 
+class ThinkFilter:
+    """Stateful filter to remove <think>...</think> from streamed text."""
+
+    def __init__(self):
+        self.residual = ""
+        self.inside_think = False
+
+    def __call__(self, delta: str) -> str:
+        buf = self.residual + delta
+        out = []
+        i = 0
+        while i < len(buf):
+            if not self.inside_think and buf.startswith("<think>", i):
+                self.inside_think = True
+                i += len("<think>")
+                continue
+            if self.inside_think:
+                end = buf.find("</think>", i)
+                if end == -1:
+                    self.residual = buf[i:]
+                    return "".join(out)
+                i = end + len("</think>")
+                self.inside_think = False
+                continue
+            out.append(buf[i])
+            i += 1
+        self.residual = ""
+        return "".join(out)
+
+
+async def stream_answer(chunk, filter_fn, sent_reasoning_flag):
+    """Process answer chunk and yield events."""
+    answer_payload = chunk["answer"]
+    if isinstance(answer_payload, dict) and "answer" in answer_payload:
+        final_answer = answer_payload["answer"]
+    else:
+        final_answer = answer_payload
+    visible = filter_fn(str(final_answer))
+    events = []
+    if visible:
+        events.append(f'data: {json.dumps({"answer": visible})}\n\n')
+    if not sent_reasoning_flag and ("<think>" in str(final_answer) or filter_fn.inside_think):
+        events.append(f'data: {json.dumps({"reasoning_available": True})}\n\n')
+        sent_reasoning_flag = True
+    return events, sent_reasoning_flag
+
+
+async def stream_evidence(chunk):
+    """Process evidence chunk and yield event."""
+    return [f'data: {json.dumps({"evidence": chunk["evidence"]})}\n\n']
+
+
+async def event_generator(request: ChatRequest):
+    filter_fn = ThinkFilter()
+    sent_reasoning_flag = False
+
+    try:
+        async for chunk in graph.astream(request.dict()):
+            if "answer" in chunk:
+                events, sent_reasoning_flag = await stream_answer(
+                    chunk, filter_fn, sent_reasoning_flag
+                )
+                for e in events:
+                    yield e
+            elif "evidence" in chunk:
+                for e in await stream_evidence(chunk):
+                    yield e
+            await asyncio.sleep(0.01)
+    except asyncio.CancelledError:
+        print("Client disconnected")
+
+
 @router.post("/chat")
 async def chat(request: ChatRequest):
-    """
-    Handles the chat endpoint.
-    """
-    graph = create_graph()
-
-    async def event_generator():
-        try:
-            # Use the graph to stream responses
-            async for chunk in graph.astream(request.dict()):
-                if "answer" in chunk:
-                    answer_payload = chunk["answer"]
-                    # The graph might be nesting the answer in another dict, extract it
-                    if isinstance(answer_payload, dict) and "answer" in answer_payload:
-                        final_answer = answer_payload["answer"]
-                    else:
-                        final_answer = answer_payload
-                    # Yield the answer chunk as a server-sent event
-                    yield f'data: {json.dumps({"answer": final_answer})}\n\n'
-                elif "evidence" in chunk:
-                    # Yield the evidence chunk as a server-sent event
-                    yield f'data: {json.dumps({"evidence": chunk["evidence"]})}\n\n'
-                # Add a small delay to allow the client to process the event
-                await asyncio.sleep(0.01)
-        except asyncio.CancelledError:
-            # Handle client disconnection gracefully
-            print("Client disconnected")
-
-    # Return a streaming response
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    """Handles the chat endpoint."""
+    return StreamingResponse(event_generator(request), media_type="text/event-stream")

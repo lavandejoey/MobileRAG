@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """
+@file: core/ingest/embed_image.py
 @author: LIU Ziyi
 @email: lavandejoey@outlook.com
 @date: 2025/08/13
@@ -26,3 +27,7 @@ class ImageEmbedder:
 
     def embed_image_query(self, image_path: str) -> List[float]:
         return self.embedder.embed_image([image_path]).tolist()[0]
+
+    def to(self, device: str):
+        self.embedder.model.to(device)
+        self.embedder.device = device

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """
+@file: scripts/smoke_cli.py
 @author: LIU Ziyi
 @email: lavandejoey@outlook.com
 @date: 2025/08/15

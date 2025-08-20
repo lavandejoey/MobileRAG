@@ -194,3 +194,4 @@ cython_debug/
 .cursorindexingignore
 /data/
 chat_history.db
+qdrant_db/

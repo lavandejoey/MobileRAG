@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """
+@file: core/sparse/fastembed.py
 @author: LIU Ziyi
 @email: lavandejoey@outlook.com
 @date: 2025/08/13

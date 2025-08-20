@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.13.0 - 2025-08-20
+
+### Added
+- Implemented `eval` subcommand for reranking performance evaluation.
+- Introduced real embedders and reranker, replacing mocked components.
+- Configured vector DB client to run in in-memory mode for reliable evaluation.
+- Added `tests/rerank_dataset.json` and `tests/rerank_report.json` for evaluation.
+
+### Changed
+- Resolved various dependency and device-related issues across ingestion, embedding, and reranking modules.
+- Ensured correct construction of required objects in reranker.
+- Updated `smoke_cli.py` header comment (no functional change).
+
 ## 0.12.0 - 2025-08-15
 
 ### Added

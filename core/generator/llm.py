@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 """
+@file: core/generator/llm.py
 @author: LIU Ziyi
 @email: lavandejoey@outlook.com
 @date: 2025/08/14
@@ -29,8 +30,12 @@ class LLMGenerator:
 
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.model_name = "Qwen/Qwen1.5-1.8B-Chat"
+        self.model_name = "Qwen/Qwen3-1.7B"
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        # Ensure safe padding & mask
+        if self.tokenizer.pad_token is None:
+            self.tokenizer.pad_token = self.tokenizer.eos_token
+        self.tokenizer.pad_token_id = self.tokenizer.convert_tokens_to_ids(self.tokenizer.pad_token)
 
         resolved_devices = resolve_devices()
         self.device = resolved_devices.get("llm", torch.device("cpu"))
@@ -49,35 +54,61 @@ class LLMGenerator:
                     load_in_8bit=True,
                 )
 
+        # If quantized, prefer device_map="auto";
+        # otherwise place the whole model on the chosen device
+        device_map = None
+        self._uses_device_map = False
+        if self.device.type == "cuda" and quantization_config is not None:
+            device_map = "auto"
+            self._uses_device_map = True
+
         self.model = AutoModelForCausalLM.from_pretrained(
             self.model_name,
             quantization_config=quantization_config,
-            device_map="auto" if self.device.type == "cuda" else None,
+            device_map=device_map,
             torch_dtype=torch.bfloat16 if self.device.type == "cuda" else torch.float32,
         )
+        if not self._uses_device_map:
+            # Explicitly place the full model on the target device in non-sharded mode
+            self.model.to(self.device)
         self.model.eval()
 
     def generate(
-        self, prompt: str, max_new_tokens: int = 128, stream: bool = False
+        self, prompt: str, max_new_tokens: int = 4069, stream: bool = False
     ) -> str | Iterator[str]:
         """
         Generates text from a prompt, either as a single string or a stream of tokens.
         """
         messages = [
-            {"role": "system", "content": "You are a helpful assistant."},
+            {
+                "role": "system",
+                "content": (
+                    "You are a helpful, concise assistant. "
+                    "Do NOT include chain-of-thought, hidden analysis, "
+                    "or any <think> tags in your replies. "
+                    "If reasoning is needed, keep it internal and return ONLY the final answer. "
+                    "Base answers strictly on the user’s query and provided context; "
+                    "if unsure, ask a brief clarifying question."
+                ),
+            },
             {"role": "user", "content": prompt},
         ]
         text = self.tokenizer.apply_chat_template(
             messages, tokenize=False, add_generation_prompt=True
         )
-        model_inputs = self.tokenizer([text], return_tensors="pt")
-        model_inputs = {k: v.to(self.device) for k, v in model_inputs.items()}
+        model_inputs = self.tokenizer([text], padding=True, truncation=True, return_tensors="pt")
+        if not self._uses_device_map:
+            model_inputs = {k: v.to(self.device) for k, v in model_inputs.items()}
 
         if stream:
             return self._stream_generate(model_inputs, max_new_tokens)
         else:
             generated_ids = self.model.generate(
-                model_inputs["input_ids"], max_new_tokens=max_new_tokens
+                model_inputs["input_ids"],
+                max_new_tokens=max_new_tokens,
+                do_sample=False,  # deterministic
+                repetition_penalty=1.05,  # light guard against loops
+                eos_token_id=self.tokenizer.eos_token_id,
             )
             generated_ids = [
                 output_ids[len(input_ids) :]
@@ -91,8 +122,13 @@ class LLMGenerator:
         """
         streamer = TextIteratorStreamer(self.tokenizer, skip_prompt=True, skip_special_tokens=True)
 
+        # Respect device placement rules
+        generation_inputs = inputs
+        if not self._uses_device_map:
+            generation_inputs = {k: v.to(self.device) for k, v in inputs.items()}
+
         generation_kwargs = dict(
-            **inputs,
+            **generation_inputs,
             streamer=streamer,
             max_new_tokens=max_new_tokens,
         )
