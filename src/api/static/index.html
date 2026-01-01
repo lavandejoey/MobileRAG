@@ -1,0 +1,87 @@
+<!doctype html>
+<!--
+MobileRAG Web UI (static)
+File:    src/api/static/index.html
+Author:  LIU Ziyi
+License: Apache-2.0
+-->
+
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1"/>
+    <title>MobileRAG Chat</title>
+    <link rel="stylesheet" href="/static/styles.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
+</head>
+
+<body>
+<div class="app">
+    <!-- Top bar -->
+    <header class="topbar">
+        <div class="brand">
+            <div class="brand-title">MobileRAG Chat</div>
+        </div>
+
+        <div class="status">
+            <span id="statusDot" class="dot dot-idle"></span>
+            <span id="statusText">Idle</span>
+        </div>
+    </header>
+
+    <!-- Main layout -->
+    <div class="layout">
+        <!-- Sidebar -->
+        <aside class="panel">
+            <div class="panel-head">
+                <div class="panel-title">Chats</div>
+                <button id="newChatBtn" class="btn btn-secondary" type="button">New chat</button>
+            </div>
+            <div id="chatItems" class="chat-items"></div>
+        </aside>
+
+        <!-- Chat -->
+        <main class="chat">
+            <div id="chatList" class="chat-list"></div>
+
+            <form id="composer" class="composer" autocomplete="off">
+                <div class="composer-box">
+                    <textarea id="prompt" class="composer-input" placeholder="Type your message..." rows="1"></textarea>
+
+                    <div class="composer-row">
+                        <!-- Placeholder only, no implementation yet -->
+                        <button id="attachBtn" class="icon-btn ghost" type="button" aria-label="Attach file" disabled>
+                            <span class="icon" aria-hidden="true">📎</span>
+                        </button>
+
+                        <!-- One mutually-exclusive action button: send when idle, stop when busy -->
+                        <button id="actionBtn" class="icon-btn action" type="button" aria-label="Send">
+                            <span id="actionIcon" class="icon" aria-hidden="true">➤</span>
+                        </button>
+                    </div>
+                </div>
+            </form>
+
+        </main>
+    </div>
+</div>
+
+<!-- Thinking drawer overlay (click outside to close) -->
+<div id="thinkOverlay" class="think-drawer-overlay" aria-hidden="true"></div>
+
+<!-- Thinking drawer -->
+<aside id="thinkDrawer" class="think-drawer" aria-hidden="true">
+    <div class="think-drawer-head">
+        <div id="thinkDrawerTitle" class="think-drawer-title">Thinking</div>
+        <button id="thinkDrawerClose" class="think-drawer-close" type="button">Close</button>
+    </div>
+    <pre id="thinkDrawerBody" class="think-drawer-body"></pre>
+</aside>
+
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.1.5/dist/purify.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/contrib/auto-render.min.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

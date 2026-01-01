@@ -1,0 +1,45 @@
+# configs/mobile_rag.yaml
+LOG_LEVEL: "INFO"
+HISTORY: "data/history"
+
+DEVICE: "auto"
+DOCS_GLOBS:
+  - "data/raw/**/*"
+  - "/mnt/c/Users/ZLiu/Documents/BBB La Vie/**/*"
+DOCS_EXTS:
+  - ".txt"
+  - ".md"
+  - ".pdf"
+
+MODEL:
+  BACKEND: "ollama"
+  MODEL_NAME: "qwen3:4b-thinking"
+  TEMPERATURE: 0.2
+  TOP_P: 0.9
+  MAX_NEW_TOKENS: 8192
+  STREAM: true
+  THINK: true
+
+RAG:
+  ENABLED: true
+  INDEX_DIR: "data/rag"
+  INDEX_FILE: "chunks.index.faiss"
+  SQLITE_FILE: "rag_meta.db"
+
+  MAX_FILE_SIZE_MB: 30
+
+  CHUNK_SIZE: 1000
+  CHUNK_OVERLAP: 150
+
+  TOP_K: 6
+  CANDIDATES_K: 30
+
+  EMBEDDER_BACKEND: "hashing"   # "hashing" | "ollama"
+  EMBED_DIM: 2048
+  OLLAMA_URL: "http://localhost:11434"
+  OLLAMA_EMBED_MODEL: "nomic-embed-text"
+
+  RERANK_BACKEND: "hybrid"
+  RERANK_ALPHA: 0.10
+
+  PROMPT_MAX_CHARS: 6000
