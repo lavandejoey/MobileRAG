@@ -2,7 +2,14 @@
 <project version="4">
   <component name="PublishConfigData" remoteFilesAllowedToDisappearOnAutoupload="false">
     <serverData>
-      <paths name="root@195.0.159.206:56521 agent">
+      <paths name="IDSCluster">
+        <serverdata>
+          <mappings>
+            <mapping local="$PROJECT_DIR$" web="/" />
+          </mappings>
+        </serverdata>
+      </paths>
+      <paths name="gpun">
         <serverdata>
           <mappings>
             <mapping local="$PROJECT_DIR$" web="/" />
