@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mobilerag"
+version = "0.1.0"
+description = "Local FastAPI + Ollama RAG server with WebSocket chat and SQLite persistence."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+dependencies = [
+  "fastapi==0.115.12",
+  "uvicorn==0.34.2",
+  "requests==2.32.3",
+  "PyYAML==6.0.2",
+  "numpy==2.2.6",
+  "scikit-learn==1.6.1",
+  "pypdf==5.5.0",
+  "websockets==15.0.1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "black==24.4.2",
+  "mypy==1.10.0",
+  "pre-commit==3.7.1",
+  "pytest==8.2.0",
+  "ruff==0.4.4",
+]
+
+[project.scripts]
+mobilerag = "src.main:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]

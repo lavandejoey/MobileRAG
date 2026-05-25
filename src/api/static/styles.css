@@ -239,6 +239,7 @@ body {
     height: 100%;
     min-height: 0;
     overflow: hidden; /* only inner list scrolls */
+    position: relative;
 }
 
 .chat-list {
@@ -250,6 +251,27 @@ body {
     min-height: 0;
     overscroll-behavior: contain;
     padding: 4px;
+}
+
+.home-view {
+    position: absolute;
+    inset: 20px 20px 108px 20px;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+}
+
+.home-view.visible {
+    display: flex;
+}
+
+.home-view h1 {
+    margin: 0;
+    font-size: clamp(32px, 4vw, 54px);
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.9);
+    line-height: 1;
 }
 
 .msg {

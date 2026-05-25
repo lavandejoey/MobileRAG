@@ -11,6 +11,7 @@ src/rag/types.py
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass(frozen=True)
@@ -20,6 +21,7 @@ class RagSnippet:
     path: str
     score: float
     text: str
+    source_label: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -40,3 +42,4 @@ class ChunkRecord:
     start: int
     end: int
     text: str
+    source_label: Optional[str] = None

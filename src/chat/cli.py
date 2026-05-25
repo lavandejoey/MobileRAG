@@ -13,12 +13,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import requests
-
-sys.path.append(Path(__file__).resolve().parent.parent.as_posix())
 
 from src.config import load_config
 

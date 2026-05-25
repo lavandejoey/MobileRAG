@@ -1,27 +1,12 @@
-fasttext-wheel==0.9.2
-open_clip_torch==3.1.0
-torch==2.8.0
-torchvision==0.23.0
-torchaudio==2.8.0
-# Core
-pydantic==2.7.4
-pydantic-settings==2.2.1
-python-dotenv==1.0.1
-tiktoken==0.7.0
-transformers==4.55.2
+fastapi==0.115.12
+uvicorn==0.34.2
+requests==2.32.3
+PyYAML==6.0.2
+numpy==2.2.6
+scikit-learn==1.6.1
+pypdf==5.5.0
+websockets==15.0.1
 
-Pillow==10.3.0
-unstructured[pdf]==0.14.4
-pymupdf==1.24.5
-pdfminer.six==20221105
-fastembed==0.7.0
-qdrant-client==1.15.1
-huggingface-hub==0.34.4
-accelerate==0.30.1
-flash-attn==2.8.3
-bitsandbytes==0.47.0
-
-# Tooling
 ruff==0.4.4
 black==24.4.2
 mypy==1.10.0

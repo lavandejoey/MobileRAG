@@ -66,7 +66,8 @@ class VectorIndex:
 
         if self._mat is None:
             raise RuntimeError("cannot save: numpy matrix is empty")
-        np.savez_compressed(str(self.index_path), mat=self._mat, ids=np.asarray(self._ids, dtype=object))
+        with self.index_path.open("wb") as f:
+            np.savez_compressed(f, mat=self._mat, ids=np.asarray(self._ids, dtype=object))
 
     def load(self) -> None:
         if not self.exists():
@@ -83,9 +84,12 @@ class VectorIndex:
             self._mat = None
             return
 
-        data = np.load(str(self.index_path), allow_pickle=True)
-        self._mat = data["mat"].astype(np.float32, copy=False)
-        self._ids = [str(x) for x in data["ids"].tolist()]
+        with self.index_path.open("rb") as f:
+            data = np.load(f, allow_pickle=True)
+            mat = data["mat"].astype(np.float32, copy=False)
+            ids = [str(x) for x in data["ids"].tolist()]
+        self._mat = mat
+        self._ids = ids
         self._index = None
 
     def build(self, vectors: np.ndarray, ids: List[str]) -> None:

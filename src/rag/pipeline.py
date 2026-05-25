@@ -11,7 +11,7 @@ from src.rag.chunker import chunk_text
 from src.rag.embedder import create_embedder
 from src.rag.fs_scan import list_doc_paths
 from src.rag.index_sqlite import RagSqliteStore
-from src.rag.parsers import file_sha1, parse_file
+from src.rag.parsers import file_sha1, parse_file_sections
 from src.rag.rerank import create_reranker
 from src.rag.types import ChunkRecord, DocRecord, RagSnippet
 from src.rag.vector_index import VectorIndex
@@ -25,6 +25,7 @@ def _stable_doc_id(path: str) -> str:
 class BuildStats:
     scanned: int = 0
     updated_docs: int = 0
+    removed_docs: int = 0
     updated_chunks: int = 0
     rebuilt_index: bool = False
     ms: int = 0
@@ -53,6 +54,19 @@ class RagPipeline:
 
         self._loaded = False
 
+    def warmup(self, build_if_missing: bool = True) -> Dict[str, int | bool]:
+        if not self.enabled:
+            return {"ok": True, "enabled": False, "loaded": False, "rebuilt_index": False}
+
+        if self.vindex.exists():
+            self._ensure_loaded()
+            return {"ok": True, "enabled": True, "loaded": True, "rebuilt_index": False}
+
+        if not build_if_missing:
+            return {"ok": True, "enabled": True, "loaded": False, "rebuilt_index": False}
+
+        return self.build_or_update_index()
+
     def _ensure_loaded(self) -> None:
         if not self.enabled:
             return
@@ -76,8 +90,15 @@ class RagPipeline:
             max_file_size_mb=self.cfg.RAG.MAX_FILE_SIZE_MB,
         )
         stats.scanned = len(paths)
+        live_paths = {str(p.resolve()) for p in paths}
 
         any_change = False
+
+        for existing_doc in self.store.list_docs():
+            if existing_doc.path not in live_paths:
+                self.store.delete_doc(existing_doc.doc_id)
+                stats.removed_docs += 1
+                any_change = True
 
         for p in paths:
             ap = str(p.resolve())
@@ -93,7 +114,7 @@ class RagPipeline:
                 continue
 
             try:
-                text, mime = parse_file(p)
+                sections, mime = parse_file_sections(p)
             except Exception:
                 continue
 
@@ -102,21 +123,29 @@ class RagPipeline:
             self.store.upsert_doc(DocRecord(doc_id=doc_id, path=ap, mtime=mtime, sha1=sha1, mime=mime))
             self.store.delete_chunks_for_doc(doc_id)
 
-            spans = chunk_text(text, chunk_size=self.cfg.RAG.CHUNK_SIZE, overlap=self.cfg.RAG.CHUNK_OVERLAP)
             chunks: List[ChunkRecord] = []
-            for idx, (s, e, ctext) in enumerate(spans):
-                chunk_id = f"{doc_id}:{idx:06d}"
-                chunks.append(
-                    ChunkRecord(
-                        chunk_id=chunk_id,
-                        doc_id=doc_id,
-                        path=ap,
-                        idx=idx,
-                        start=s,
-                        end=e,
-                        text=ctext,
-                    )
+            chunk_idx = 0
+            for section in sections:
+                spans = chunk_text(
+                    section.text,
+                    chunk_size=self.cfg.RAG.CHUNK_SIZE,
+                    overlap=self.cfg.RAG.CHUNK_OVERLAP,
                 )
+                for s, e, ctext in spans:
+                    chunk_id = f"{doc_id}:{chunk_idx:06d}"
+                    chunks.append(
+                        ChunkRecord(
+                            chunk_id=chunk_id,
+                            doc_id=doc_id,
+                            path=ap,
+                            idx=chunk_idx,
+                            start=s,
+                            end=e,
+                            text=ctext,
+                            source_label=section.source_label,
+                        )
+                    )
+                    chunk_idx += 1
             self.store.insert_chunks(chunks)
 
             stats.updated_docs += 1
@@ -142,6 +171,7 @@ class RagPipeline:
             "ok": True,
             "scanned": stats.scanned,
             "updated_docs": stats.updated_docs,
+            "removed_docs": stats.removed_docs,
             "updated_chunks": stats.updated_chunks,
             "rebuilt_index": bool(stats.rebuilt_index),
             "ms": stats.ms,
@@ -151,7 +181,8 @@ class RagPipeline:
         if not self.enabled:
             return []
 
-        self.build_or_update_index()
+        if not self.vindex.exists():
+            self.build_or_update_index()
         self._ensure_loaded()
 
         top_k = int(top_k or self.cfg.RAG.TOP_K)
@@ -172,7 +203,16 @@ class RagPipeline:
             if c is None:
                 continue
             score = float(scores[0][rank]) if scores.size else 0.0
-            snips.append(RagSnippet(chunk_id=cid, doc_id=c.doc_id, path=c.path, score=score, text=c.text))
+            snips.append(
+                RagSnippet(
+                    chunk_id=cid,
+                    doc_id=c.doc_id,
+                    path=c.path,
+                    score=score,
+                    text=c.text,
+                    source_label=c.source_label,
+                )
+            )
 
         snips = self.reranker.rerank(query, snips)
         return snips[:top_k]
@@ -182,7 +222,8 @@ class RagPipeline:
         parts: List[str] = []
         total = 0
         for i, s in enumerate(snips, start=1):
-            header = f"[{i}] {s.path} (score={s.score:.4f})\n"
+            location = f" [{s.source_label}]" if s.source_label else ""
+            header = f"[{i}] {s.path}{location} (score={s.score:.4f})\n"
             body = (s.text or "").strip() + "\n"
             block = header + body + "\n"
             if total + len(block) > max_chars:

@@ -41,7 +41,7 @@ class HybridReranker:
             if t:
                 overlap = len(q & t) / max(1, len(q))
             score = float(s.score) + self.alpha * float(overlap)
-            rescored.append(RagSnippet(s.chunk_id, s.doc_id, s.path, score, s.text))
+            rescored.append(RagSnippet(s.chunk_id, s.doc_id, s.path, score, s.text, s.source_label))
 
         rescored.sort(key=lambda x: x.score, reverse=True)
         return rescored

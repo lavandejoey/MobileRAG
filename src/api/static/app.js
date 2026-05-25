@@ -60,6 +60,7 @@
         prompt: document.getElementById("prompt"),
         composer: document.getElementById("composer"),
         chatList: document.getElementById("chatList"),
+        homeView: document.getElementById("homeView"),
         chatItems: document.getElementById("chatItems"),
         newChatBtn: document.getElementById("newChatBtn"),
         statusDot: document.getElementById("statusDot"),
@@ -84,6 +85,38 @@
     let turnThinkText = "";
     let turnAnswerText = "";
     let turnThinkMs = 0;
+
+    function getChatIdFromPath() {
+        const path = window.location.pathname || "/";
+        if (path === "/" || path === "") return "";
+        const trimmed = path.replace(/^\/+|\/+$/g, "");
+        if (!trimmed || trimmed.startsWith("v1") || trimmed.startsWith("static")) return "";
+        return decodeURIComponent(trimmed);
+    }
+
+    function navigateToChat(chatId, replace = false) {
+        const nextPath = chatId ? `/${encodeURIComponent(chatId)}` : "/";
+        const currentPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+        if (currentPath === nextPath) return;
+        const fn = replace ? "replaceState" : "pushState";
+        window.history[fn]({chatId: chatId || ""}, "", nextPath);
+    }
+
+    function clearChatSurface() {
+        el.chatList.innerHTML = "";
+        resetTurnState();
+    }
+
+    function showHomeView() {
+        clearChatSurface();
+        el.homeView.classList.add("visible");
+        el.homeView.setAttribute("aria-hidden", "false");
+    }
+
+    function hideHomeView() {
+        el.homeView.classList.remove("visible");
+        el.homeView.setAttribute("aria-hidden", "true");
+    }
 
     function flushFinalAnswerRender() {
         if (!currentAssistant) return;
@@ -343,8 +376,8 @@
         if (selectedChatId === chatId) {
             selectedChatId = "";
             localStorage.removeItem("mr_selected_chat_id");
-            el.chatList.innerHTML = "";
-            resetTurnState();
+            navigateToChat("", false);
+            showHomeView();
         }
         await refreshChatList();
     }
@@ -362,15 +395,21 @@
         });
     }
 
-    async function selectChat(chatId) {
+    async function selectChat(chatId, options = {}) {
+        const {updateHistory = true, replaceHistory = false} = options;
         selectedChatId = chatId;
         localStorage.setItem("mr_selected_chat_id", selectedChatId);
+        if (updateHistory) navigateToChat(chatId, replaceHistory);
 
-        el.chatList.innerHTML = "";
-        resetTurnState();
+        hideHomeView();
+        clearChatSurface();
 
         const r = await fetch(`${apiBase()}/v1/chats/${chatId}/messages?limit=2000`, {cache: "no-store"});
         if (!r.ok) {
+            selectedChatId = "";
+            localStorage.removeItem("mr_selected_chat_id");
+            navigateToChat("", true);
+            showHomeView();
             await refreshChatList();
             return;
         }
@@ -469,6 +508,7 @@
     function startWsStream(message) {
         closeWs();
         resetTurnState();
+        hideHomeView();
         setBusy(true);
 
         // optimistic UI user message
@@ -500,7 +540,17 @@
             if (ev === "chat_created") {
                 selectedChatId = obj.chat_id || "";
                 localStorage.setItem("mr_selected_chat_id", selectedChatId);
+                navigateToChat(selectedChatId, false);
                 refreshChatList();
+                return;
+            }
+
+            if (ev === "stage") {
+                const stage = obj.stage || "";
+                if (stage === "preparing" || stage === "retrieval") {
+                    const assistantMsg = ensureAssistantMessage();
+                    setThinkHintThinking(assistantMsg.thinkHintEl);
+                }
                 return;
             }
 
@@ -611,10 +661,23 @@
     el.newChatBtn.addEventListener("click", async () => {
         selectedChatId = "";
         localStorage.removeItem("mr_selected_chat_id");
-        el.chatList.innerHTML = "";
-        resetTurnState();
+        navigateToChat("", false);
+        showHomeView();
         await refreshChatList();
         setStatus("dot-idle", "Idle");
+    });
+
+    window.addEventListener("popstate", async () => {
+        const chatId = getChatIdFromPath();
+        selectedChatId = chatId;
+        if (chatId) {
+            localStorage.setItem("mr_selected_chat_id", chatId);
+            await selectChat(chatId, {updateHistory: false});
+        } else {
+            localStorage.removeItem("mr_selected_chat_id");
+            await refreshChatList();
+            showHomeView();
+        }
     });
 
     el.prompt.addEventListener("keydown", (e) => {
@@ -635,11 +698,12 @@
 
     (async () => {
         setStatus("dot-idle", "Idle");
+        selectedChatId = getChatIdFromPath() || selectedChatId;
         await refreshChatList();
         if (selectedChatId) {
-            await selectChat(selectedChatId);
+            await selectChat(selectedChatId, {updateHistory: false});
         } else {
-            addMessage("system", "Ready. Select a chat or send a message to create one.", "SYSTEM");
+            showHomeView();
         }
         setActionButtonState();
     })();

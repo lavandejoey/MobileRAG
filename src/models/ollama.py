@@ -29,6 +29,9 @@ class OllamaChatModel(ChatModel):
         self._session = requests.Session()
         self._model_ready = False
 
+    def prepare(self) -> None:
+        self._ensure_model_ready()
+
     def _ensure_model_ready(self) -> None:
         if self._model_ready:
             return

@@ -10,6 +10,7 @@ src/storage/history_db.py
 """
 from __future__ import annotations
 
+import re
 import sqlite3
 import threading
 import time
@@ -57,15 +58,29 @@ def _now() -> float:
     return time.time()
 
 
-def _title_from_first_user_text(text: str, max_len: int = 48) -> str:
-    s = " ".join((text or "").strip().split())
-    if not s:
+_TITLE_SPLIT_RE = re.compile(r"[。\.\!\?？！，,;；:\n]+")
+_TITLE_SPACE_RE = re.compile(r"\s+")
+
+
+def _title_from_first_user_text(text: str, max_len: int = 36) -> str:
+    raw = (text or "").strip()
+    if not raw:
         return "New chat"
-    if len(s) <= max_len:
-        return s
-    if max_len <= 1:
-        return "…"
-    return s[: max_len - 1] + "…"
+
+    cleaned = _TITLE_SPACE_RE.sub(" ", raw)
+    segments = [seg.strip(" -_[](){}\"'`") for seg in _TITLE_SPLIT_RE.split(cleaned)]
+    segments = [seg for seg in segments if seg]
+
+    title = segments[0] if segments else cleaned
+
+    if len(title) > max_len:
+        title = title[:max_len].rstrip(" -_.,;:!?！？，。")
+
+    if not title:
+        return "New chat"
+    if len(title) == len(cleaned) or len(title) >= max_len:
+        return title
+    return title
 
 
 class HistoryDB:
@@ -114,9 +129,9 @@ class HistoryDB:
             )
             self._conn.commit()
 
-    def create_chat(self, title: str) -> str:
+    def create_chat(self, first_user_text: str) -> str:
         chat_id = str(uuid.uuid4())
-        self.ensure_chat(chat_id, title)
+        self.ensure_chat(chat_id, first_user_text)
         return chat_id
 
     def list_chats(self, limit: int = 100) -> List[ChatRow]:

@@ -21,7 +21,6 @@ Message = Dict[str, str]
 def build_llm_messages(
         db: HistoryDB,
         chat_id: str,
-        user_message: str,
         rag_context: str = "",
 ) -> List[Message]:
     past = db.get_messages(chat_id=chat_id, limit=2000)

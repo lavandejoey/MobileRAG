@@ -95,7 +95,7 @@ class AppConfig:
     DEVICE: str = "auto"
     HISTORY: str = "data/history"
     DOCS_GLOBS: tuple[str, ...] = ("data/raw/*",)
-    DOCS_EXTS: tuple[str, ...] = (".txt", ".md", ".pdf")
+    DOCS_EXTS: tuple[str, ...] = (".txt", ".md", ".pdf", ".docx", ".html", ".htm", ".csv")
     MODEL: ModelConfig = ModelConfig()
     RAG: RagConfig = RagConfig()
 

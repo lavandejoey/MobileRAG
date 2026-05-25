@@ -25,6 +25,8 @@ Message = Dict[str, str]  # {"role": "...", "content": "..."}
 
 
 class ChatModel(Protocol):
+    def prepare(self) -> None: ...
+
     def stream_chat(
             self, messages: List[Message], params: GenerationParams
     ) -> Iterable[str]: ...

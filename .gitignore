@@ -195,3 +195,6 @@ cython_debug/
 /data/
 chat_history.db
 qdrant_db/
+.vscode/
+.codex/
+.agents/

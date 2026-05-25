@@ -52,12 +52,33 @@ class RagSqliteStore:
                     idx      INTEGER NOT NULL,
                     start    INTEGER NOT NULL,
                     end      INTEGER NOT NULL,
+                    source_label TEXT,
                     text     TEXT    NOT NULL,
                     FOREIGN KEY (doc_id) REFERENCES docs (doc_id)
                 );
                 """
             )
             conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_doc ON chunks(doc_id);")
+            cols = {
+                row["name"]
+                for row in conn.execute("PRAGMA table_info(chunks)").fetchall()
+            }
+            if "source_label" not in cols:
+                conn.execute("ALTER TABLE chunks ADD COLUMN source_label TEXT;")
+
+    def list_docs(self) -> List[DocRecord]:
+        with self._conn() as conn:
+            rows = conn.execute("SELECT * FROM docs ORDER BY path").fetchall()
+        return [
+            DocRecord(
+                doc_id=row["doc_id"],
+                path=row["path"],
+                mtime=float(row["mtime"]),
+                sha1=row["sha1"],
+                mime=row["mime"],
+            )
+            for row in rows
+        ]
 
     def get_doc_by_path(self, path: str) -> Optional[DocRecord]:
         with self._conn() as conn:
@@ -90,16 +111,21 @@ class RagSqliteStore:
         with self._conn() as conn:
             conn.execute("DELETE FROM chunks WHERE doc_id=?", (doc_id,))
 
+    def delete_doc(self, doc_id: str) -> None:
+        with self._conn() as conn:
+            conn.execute("DELETE FROM chunks WHERE doc_id=?", (doc_id,))
+            conn.execute("DELETE FROM docs WHERE doc_id=?", (doc_id,))
+
     def insert_chunks(self, chunks: List[ChunkRecord]) -> None:
         if not chunks:
             return
         with self._conn() as conn:
             conn.executemany(
                 """
-                INSERT OR REPLACE INTO chunks(chunk_id, doc_id, path, idx, start, end, text)
-                VALUES(?,?,?,?,?,?,?)
+                INSERT OR REPLACE INTO chunks(chunk_id, doc_id, path, idx, start, end, source_label, text)
+                VALUES(?,?,?,?,?,?,?,?)
                 """,
-                [(c.chunk_id, c.doc_id, c.path, c.idx, c.start, c.end, c.text) for c in chunks],
+                [(c.chunk_id, c.doc_id, c.path, c.idx, c.start, c.end, c.source_label, c.text) for c in chunks],
             )
 
     def get_all_chunks(self) -> List[ChunkRecord]:
@@ -116,6 +142,7 @@ class RagSqliteStore:
                     start=int(r["start"]),
                     end=int(r["end"]),
                     text=r["text"],
+                    source_label=r["source_label"],
                 )
             )
         return out
@@ -141,6 +168,7 @@ class RagSqliteStore:
                     start=int(r["start"]),
                     end=int(r["end"]),
                     text=r["text"],
+                    source_label=r["source_label"],
                 )
             )
         return out

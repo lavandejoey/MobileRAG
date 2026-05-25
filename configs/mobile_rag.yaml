@@ -10,6 +10,10 @@ DOCS_EXTS:
   - ".txt"
   - ".md"
   - ".pdf"
+  - ".docx"
+  - ".html"
+  - ".htm"
+  - ".csv"
 
 MODEL:
   BACKEND: "ollama"
