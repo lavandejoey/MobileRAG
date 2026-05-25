@@ -10,12 +10,31 @@ src/chat/build_messages.py
 """
 from __future__ import annotations
 
+from pathlib import Path
 from typing import List, Dict
 
 from src.chat.system_prompt import SYSTEM_PROMPT
+from src.rag.types import RagSnippet
 from src.storage.history_db import HistoryDB
 
 Message = Dict[str, str]
+
+
+def format_rag_context(snips: List[RagSnippet], max_chars: int = 6000) -> str:
+    parts: List[str] = []
+    total = 0
+    for snip in snips:
+        cite = snip.citation_id or "FX"
+        label = Path(snip.path).name
+        location = f" ({snip.source_label})" if snip.source_label else ""
+        header = f"[{cite}] {label}{location}\n"
+        body = (snip.text or "").strip() + "\n"
+        block = header + body + "\n"
+        if total + len(block) > max_chars:
+            break
+        parts.append(block)
+        total += len(block)
+    return "".join(parts).strip()
 
 
 def build_llm_messages(

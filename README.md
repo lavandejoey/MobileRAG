@@ -8,6 +8,7 @@ Current stack:
 - Local vector index + SQLite RAG metadata
 - Browser UI with route-based chats: `/` and `/<chat_id>`
 - Ollama chat backend
+- Optional sentence-level file citations rendered as clickable file badges
 
 Supported file types:
 - `.txt`
@@ -45,6 +46,7 @@ http://127.0.0.1:8000/
 - `/<chat_id>`: load one chat
 - `GET /healthz`
 - `POST /v1/index/build`
+- `GET /v1/files/{doc_id}`: browser preview for a source file
 - `GET /v1/chats`
 - `GET /v1/chats/{chat_id}/messages`
 - `DELETE /v1/chats/{chat_id}`
@@ -56,7 +58,8 @@ http://127.0.0.1:8000/
 - Chat history recall for questions like “前面问你了什么” is handled server-side.
 - RAG is warmed on startup.
 - Retrieval no longer rebuilds the full index on every message.
-- Answers append short file references when RAG snippets were used.
+- When a sentence uses retrieved file facts, the answer may include an optional clickable file badge at sentence end.
+- Citation badges open file preview in the browser when possible.
 - Deleted source files are removed from the next index rebuild.
 
 ## Critical limits

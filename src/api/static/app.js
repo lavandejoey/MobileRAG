@@ -85,6 +85,7 @@
     let turnThinkText = "";
     let turnAnswerText = "";
     let turnThinkMs = 0;
+    let turnCitations = {};
 
     function getChatIdFromPath() {
         const path = window.location.pathname || "/";
@@ -126,9 +127,44 @@
             ans.className = "answer-block";
             currentAssistant.bubble.appendChild(ans);
         }
-        ans.innerHTML = renderMarkdownToHtml(turnAnswerText);
+        ans.innerHTML = renderAnswerHtml(turnAnswerText, turnCitations);
         renderMathInElementSafe(ans);
         scrollToBottom();
+    }
+
+    function setTurnCitations(citations) {
+        turnCitations = {};
+        for (const item of citations || []) {
+            if (item && item.citation_id) {
+                turnCitations[item.citation_id] = item;
+            }
+        }
+    }
+
+    function replaceCitationTokens(html, citations) {
+        return String(html || "").replace(/\[(F\d+)\]/g, (full, id) => {
+            const item = citations[id];
+            if (!item) return full;
+            const title = item.name || id;
+            const openUrl = item.open_url || "#";
+            const label = compactCitationLabel(title);
+            return `<a class="citation-badge" href="${openUrl}" target="_blank" rel="noopener noreferrer" title="${title}">${escapeHtml(label)}</a>`;
+        });
+    }
+
+    function renderAnswerHtml(md, citations) {
+        const rawHtml = renderMarkdownToHtml(md);
+        return replaceCitationTokens(rawHtml, citations || {});
+    }
+
+    function compactCitationLabel(name) {
+        const base = String(name || "").trim();
+        if (!base) return "File";
+        const dot = base.lastIndexOf(".");
+        const stem = dot > 0 ? base.slice(0, dot) : base;
+        const ext = dot > 0 ? base.slice(dot) : "";
+        const cleanStem = stem.length > 18 ? `${stem.slice(0, 18).trim()}…` : stem;
+        return `${cleanStem}${ext}`;
     }
 
     function epochSecToLocale(tsSec) {
@@ -319,6 +355,7 @@
         turnThinkText = "";
         turnAnswerText = "";
         turnThinkMs = 0;
+        turnCitations = {};
     }
 
     /* =========================
@@ -469,7 +506,11 @@
                 answer.className = "answer-block";
                 // Render markdown + TeX on reload (IMPORTANT)
                 const raw = m.content || "";
-                answer.innerHTML = renderMarkdownToHtml(raw);
+                const citations = ((pendingMeta && pendingMeta.citations) || []).reduce((acc, item) => {
+                    if (item && item.citation_id) acc[item.citation_id] = item;
+                    return acc;
+                }, {});
+                answer.innerHTML = renderAnswerHtml(raw, citations);
                 renderMathInElementSafe(answer);
                 assistantMsg.bubble.appendChild(answer);
 
@@ -554,6 +595,11 @@
                 return;
             }
 
+            if (ev === "rag") {
+                setTurnCitations(obj.citations || []);
+                return;
+            }
+
             if (ev === "think_start") {
                 const assistantMsg = ensureAssistantMessage();
                 setThinkHintThinking(assistantMsg.thinkHintEl);
@@ -593,7 +639,7 @@
                 }
                 // Render Markdown + TeX (throttled)
                 scheduleRender(() => {
-                    ans.innerHTML = renderMarkdownToHtml(turnAnswerText);
+                    ans.innerHTML = renderAnswerHtml(turnAnswerText, turnCitations);
                     renderMathInElementSafe(ans);
                     scrollToBottom();
                 });

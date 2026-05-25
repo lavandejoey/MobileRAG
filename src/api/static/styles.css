@@ -274,6 +274,29 @@ body {
     line-height: 1;
 }
 
+.citation-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    border: 1px solid rgba(122, 162, 255, 0.35);
+    background: rgba(122, 162, 255, 0.12);
+    color: #d9e5ff;
+    border-radius: 999px;
+    font-size: 11px;
+    line-height: 1;
+    min-height: 20px;
+    margin-left: 2px;
+    margin-right: 2px;
+    vertical-align: middle;
+    padding: 4px 8px;
+}
+
+.citation-badge:hover {
+    background: rgba(122, 162, 255, 0.2);
+    border-color: rgba(122, 162, 255, 0.55);
+}
+
 .msg {
     display: flex;
     flex-direction: column;

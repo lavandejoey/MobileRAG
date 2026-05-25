@@ -211,23 +211,10 @@ class RagPipeline:
                     score=score,
                     text=c.text,
                     source_label=c.source_label,
+                    citation_id=None,
                 )
             )
 
         snips = self.reranker.rerank(query, snips)
         return snips[:top_k]
 
-    @staticmethod
-    def format_for_prompt(snips: List[RagSnippet], max_chars: int = 6000) -> str:
-        parts: List[str] = []
-        total = 0
-        for i, s in enumerate(snips, start=1):
-            location = f" [{s.source_label}]" if s.source_label else ""
-            header = f"[{i}] {s.path}{location} (score={s.score:.4f})\n"
-            body = (s.text or "").strip() + "\n"
-            block = header + body + "\n"
-            if total + len(block) > max_chars:
-                break
-            parts.append(block)
-            total += len(block)
-        return "".join(parts).strip()

@@ -22,6 +22,7 @@ class RagSnippet:
     score: float
     text: str
     source_label: Optional[str] = None
+    citation_id: Optional[str] = None
 
 
 @dataclass(frozen=True)

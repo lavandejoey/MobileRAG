@@ -93,6 +93,19 @@ class RagSqliteStore:
             mime=row["mime"],
         )
 
+    def get_doc_by_id(self, doc_id: str) -> Optional[DocRecord]:
+        with self._conn() as conn:
+            row = conn.execute("SELECT * FROM docs WHERE doc_id=?", (doc_id,)).fetchone()
+        if not row:
+            return None
+        return DocRecord(
+            doc_id=row["doc_id"],
+            path=row["path"],
+            mtime=float(row["mtime"]),
+            sha1=row["sha1"],
+            mime=row["mime"],
+        )
+
     def upsert_doc(self, doc: DocRecord) -> None:
         with self._conn() as conn:
             conn.execute(

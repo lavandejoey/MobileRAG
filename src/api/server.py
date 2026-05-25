@@ -28,6 +28,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from src.chat.build_messages import build_llm_messages
+from src.chat.build_messages import format_rag_context
 from src.chat.think_split import split_think_stream
 from src.config import AppConfig, load_config
 from src.models.base import GenerationParams
@@ -112,21 +113,38 @@ def _build_history_recall_answer(db: HistoryDB, chat_id: str, current_message: s
     )
 
 
-def _build_reference_lines(snips: list) -> str:
-    seen: set[tuple[str, str | None]] = set()
-    refs: list[str] = []
+def _assign_citation_ids(snips: list) -> tuple[list, list[dict]]:
+    doc_to_citation: dict[str, str] = {}
+    docs: list[dict] = []
+    next_idx = 1
+    assigned = []
     for snip in snips:
-        key = (snip.path, snip.source_label)
-        if key in seen:
-            continue
-        seen.add(key)
-        location = f" ({snip.source_label})" if snip.source_label else ""
-        refs.append(f"- {Path(snip.path).name}{location}")
-        if len(refs) >= 4:
-            break
-    if not refs:
-        return ""
-    return "\n\n参考文件：\n" + "\n".join(refs)
+        citation_id = doc_to_citation.get(snip.doc_id)
+        if citation_id is None:
+            citation_id = f"F{next_idx}"
+            next_idx += 1
+            doc_to_citation[snip.doc_id] = citation_id
+            docs.append(
+                {
+                    "citation_id": citation_id,
+                    "doc_id": snip.doc_id,
+                    "path": snip.path,
+                    "name": Path(snip.path).name,
+                    "open_url": f"/v1/files/{snip.doc_id}",
+                }
+            )
+        assigned.append(
+            type(snip)(
+                chunk_id=snip.chunk_id,
+                doc_id=snip.doc_id,
+                path=snip.path,
+                score=snip.score,
+                text=snip.text,
+                source_label=snip.source_label,
+                citation_id=citation_id,
+            )
+        )
+    return assigned, docs
 
 
 def create_app(config_path: str | None = None) -> FastAPI:
@@ -190,6 +208,22 @@ def create_app(config_path: str | None = None) -> FastAPI:
         return _state_rag(app).build_or_update_index()
 
 
+    @app.get("/v1/files/{doc_id}")
+    def open_file(doc_id: str):
+        doc = _state_rag(app).store.get_doc_by_id(doc_id)
+        if doc is None:
+            return JSONResponse({"detail": "Not Found"}, status_code=404)
+        path = Path(doc.path)
+        if not path.exists():
+            return JSONResponse({"detail": "Not Found"}, status_code=404)
+        return FileResponse(
+            path,
+            media_type=doc.mime,
+            filename=path.name,
+            headers={"Content-Disposition": f'inline; filename="{path.name}"'},
+        )
+
+
     @app.get("/v1/chats")
     def list_chats(limit: int = 200):
         return [chat.to_dict() for chat in _state_db(app).list_chats(limit=limit)]
@@ -244,6 +278,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
         db.add_message(chat_id=chat_id, role="user", content=message)
 
         snips = []
+        citation_docs = []
         rag_context = ""
         rag_docs_payload = []
 
@@ -326,9 +361,12 @@ def create_app(config_path: str | None = None) -> FastAPI:
             await send({"event": "stage", "stage": "retrieval"})
             if cfg.RAG.ENABLED:
                 snips = rag.retrieve(message, top_k=cfg.RAG.TOP_K)
-                rag_context = rag.format_for_prompt(snips, max_chars=cfg.RAG.PROMPT_MAX_CHARS)
+                snips, citation_docs = _assign_citation_ids(snips)
+                rag_context = format_rag_context(snips, max_chars=cfg.RAG.PROMPT_MAX_CHARS)
                 rag_docs_payload = [
                     {
+                        "citation_id": s.citation_id,
+                        "doc_id": s.doc_id,
                         "path": s.path,
                         "score": s.score,
                         "chunk_id": s.chunk_id,
@@ -337,7 +375,7 @@ def create_app(config_path: str | None = None) -> FastAPI:
                     }
                     for s in snips
                 ]
-            await send({"event": "rag", "docs": rag_docs_payload})
+            await send({"event": "rag", "docs": rag_docs_payload, "citations": citation_docs})
 
             messages = build_llm_messages(db, chat_id=chat_id, rag_context=rag_context)
             await send({"event": "stage", "stage": "generation"})
@@ -373,14 +411,12 @@ def create_app(config_path: str | None = None) -> FastAPI:
             if not full_answer:
                 raise RuntimeError("Model returned empty answer")
 
-            if cfg.RAG.ENABLED and snips:
-                full_answer += _build_reference_lines(snips)
-
             meta = {
                 "think_ms": think_ms or 0,
                 "total_ms": total_ms,
                 "created_new": created_new,
                 "session_id": session_id,
+                "citations": citation_docs,
             }
             persist_turn(db, chat_id=chat_id, assistant_answer=full_answer, assistant_think=full_think, meta=meta)
 
