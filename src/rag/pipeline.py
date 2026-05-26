@@ -4,7 +4,9 @@ import hashlib
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional
+
+import numpy as np
 
 from src.config import AppConfig
 from src.rag.chunker import chunk_text
@@ -19,6 +21,17 @@ from src.rag.vector_index import VectorIndex
 
 def _stable_doc_id(path: str) -> str:
     return hashlib.sha1(path.encode("utf-8", errors="ignore")).hexdigest()
+
+
+def _embed_chunks(embedder, chunks: List[ChunkRecord]):
+    if not chunks:
+        return None, []
+    ids = [c.chunk_id for c in chunks]
+    texts = [c.text for c in chunks]
+    vecs = embedder.embed(texts)
+    if vecs.shape[0] != len(ids):
+        raise RuntimeError("embedding count mismatch")
+    return vecs, ids
 
 
 @dataclass
@@ -85,20 +98,20 @@ class RagPipeline:
 
         paths = list_doc_paths(
             patterns=self.cfg.DOCS_GLOBS,
-            exts=self.cfg.DOCS_EXTS,
+            exts=None,
             follow_symlinks=False,
             max_file_size_mb=self.cfg.RAG.MAX_FILE_SIZE_MB,
         )
         stats.scanned = len(paths)
         live_paths = {str(p.resolve()) for p in paths}
 
-        any_change = False
+        removed_docs: List[DocRecord] = []
+        changed_docs: List[tuple[DocRecord | None, DocRecord, List[ChunkRecord]]] = []
 
         for existing_doc in self.store.list_docs():
             if existing_doc.path not in live_paths:
-                self.store.delete_doc(existing_doc.doc_id)
+                removed_docs.append(existing_doc)
                 stats.removed_docs += 1
-                any_change = True
 
         for p in paths:
             ap = str(p.resolve())
@@ -119,9 +132,7 @@ class RagPipeline:
                 continue
 
             doc_id = existing.doc_id if existing is not None else _stable_doc_id(ap)
-
-            self.store.upsert_doc(DocRecord(doc_id=doc_id, path=ap, mtime=mtime, sha1=sha1, mime=mime))
-            self.store.delete_chunks_for_doc(doc_id)
+            next_doc = DocRecord(doc_id=doc_id, path=ap, mtime=mtime, sha1=sha1, mime=mime)
 
             chunks: List[ChunkRecord] = []
             chunk_idx = 0
@@ -146,25 +157,56 @@ class RagPipeline:
                         )
                     )
                     chunk_idx += 1
-            self.store.insert_chunks(chunks)
-
+            changed_docs.append((existing, next_doc, chunks))
             stats.updated_docs += 1
             stats.updated_chunks += len(chunks)
-            any_change = True
 
-        if (not self.vindex.exists()) or any_change:
+        any_change = bool(removed_docs or changed_docs)
+        needs_full_rebuild = not self.vindex.exists()
+        if self.vindex.exists():
+            self._ensure_loaded()
+            if any_change and not self.vindex.is_mutable():
+                needs_full_rebuild = True
+
+        if needs_full_rebuild:
+            for existing_doc in removed_docs:
+                self.store.delete_doc(existing_doc.doc_id)
+            for existing, next_doc, chunks in changed_docs:
+                if existing is not None:
+                    self.store.delete_chunks_for_doc(existing.doc_id)
+                self.store.upsert_doc(next_doc)
+                self.store.insert_chunks(chunks)
+
             all_chunks = self.store.get_all_chunks()
-            ids = [c.chunk_id for c in all_chunks]
-            texts = [c.text for c in all_chunks]
-            vecs = self.embedder.embed(texts)
-
-            if vecs.shape[0] != len(ids):
-                raise RuntimeError("embedding count mismatch")
-
-            self.vindex.build(vecs, ids)
+            if all_chunks:
+                vecs, ids = _embed_chunks(self.embedder, all_chunks)
+                assert vecs is not None
+                self.vindex.build(vecs, ids)
+            else:
+                self.vindex.build(np.empty((0, self.cfg.RAG.EMBED_DIM), dtype=np.float32), [])
             self.vindex.save()
             self._loaded = True
             stats.rebuilt_index = True
+        elif any_change:
+            for existing_doc in removed_docs:
+                old_chunk_ids = self.store.list_chunk_ids_for_doc(existing_doc.doc_id)
+                self.vindex.remove_ids(old_chunk_ids)
+                self.store.delete_doc(existing_doc.doc_id)
+
+            for existing, next_doc, chunks in changed_docs:
+                old_chunk_ids = self.store.list_chunk_ids_for_doc(next_doc.doc_id) if existing is not None else []
+                if old_chunk_ids:
+                    self.vindex.remove_ids(old_chunk_ids)
+                if existing is not None:
+                    self.store.delete_chunks_for_doc(existing.doc_id)
+                self.store.upsert_doc(next_doc)
+                self.store.insert_chunks(chunks)
+                vecs, ids = _embed_chunks(self.embedder, chunks)
+                if vecs is not None:
+                    self.vindex.add(vecs, ids)
+
+            self.vindex.save()
+            self._loaded = True
 
         stats.ms = int((time.perf_counter() - t0) * 1000)
         return {
@@ -177,7 +219,51 @@ class RagPipeline:
             "ms": stats.ms,
         }
 
-    def retrieve(self, query: str, top_k: int | None = None) -> List[RagSnippet]:
+    def _snippets_from_chunks(
+            self,
+            query: str,
+            chunks: List[ChunkRecord],
+            top_k: int,
+            preferred_doc_ids: Optional[set[str]] = None,
+    ) -> List[RagSnippet]:
+        if not chunks:
+            return []
+
+        qv = self.embedder.embed([query])
+        vecs, ids = _embed_chunks(self.embedder, chunks)
+        if vecs is None:
+            return []
+
+        sims = (qv @ vecs.T)[0]
+        by_doc_first_seen: set[str] = set()
+        snips: List[RagSnippet] = []
+        for idx, chunk in enumerate(chunks):
+            score = float(sims[idx]) if idx < len(sims) else 0.0
+            file_name = Path(chunk.path).name.lower()
+            ql = query.lower()
+            if ql and any(tok in file_name for tok in ql.split()):
+                score += 0.12
+            if chunk.idx == 0:
+                score += 0.05
+            if preferred_doc_ids and chunk.doc_id in preferred_doc_ids and chunk.doc_id not in by_doc_first_seen:
+                score += 0.08
+                by_doc_first_seen.add(chunk.doc_id)
+            snips.append(
+                RagSnippet(
+                    chunk_id=chunk.chunk_id,
+                    doc_id=chunk.doc_id,
+                    path=chunk.path,
+                    score=score,
+                    text=chunk.text,
+                    source_label=chunk.source_label,
+                    citation_id=None,
+                )
+            )
+
+        snips = self.reranker.rerank(query, snips)
+        return snips[:top_k]
+
+    def retrieve(self, query: str, top_k: int | None = None, preferred_doc_ids: Optional[List[str]] = None) -> List[RagSnippet]:
         if not self.enabled:
             return []
 
@@ -187,6 +273,17 @@ class RagPipeline:
 
         top_k = int(top_k or self.cfg.RAG.TOP_K)
         cand_k = int(max(top_k, self.cfg.RAG.CANDIDATES_K))
+
+        if preferred_doc_ids:
+            preferred_chunks = self.store.get_chunks_for_doc_ids(preferred_doc_ids)
+            preferred_snips = self._snippets_from_chunks(
+                query,
+                preferred_chunks,
+                top_k=top_k,
+                preferred_doc_ids=set(preferred_doc_ids),
+            )
+            if preferred_snips:
+                return preferred_snips
 
         qv = self.embedder.embed([query])
         scores, id_lists = self.vindex.search(qv, k=cand_k)

@@ -9,6 +9,7 @@ DOCS_GLOBS:
 DOCS_EXTS:
   - ".txt"
   - ".md"
+  - ".tex"
   - ".pdf"
   - ".docx"
   - ".html"
@@ -29,6 +30,7 @@ RAG:
   INDEX_DIR: "data/rag"
   INDEX_FILE: "chunks.index.faiss"
   SQLITE_FILE: "rag_meta.db"
+  UPLOAD_DIR: "data/raw/uploads"
 
   MAX_FILE_SIZE_MB: 30
 

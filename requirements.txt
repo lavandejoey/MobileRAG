@@ -6,6 +6,7 @@ numpy==2.2.6
 scikit-learn==1.6.1
 pypdf==5.5.0
 websockets==15.0.1
+python-multipart==0.0.20
 
 ruff==0.4.4
 black==24.4.2

@@ -63,6 +63,7 @@ class RagConfig:
     INDEX_DIR: str = "data/rag"
     INDEX_FILE: str = "chunks.index.faiss"  # if faiss exists -> real faiss index; else -> npz stored with this name
     SQLITE_FILE: str = "rag_meta.db"
+    UPLOAD_DIR: str = "data/raw/uploads"
 
     # Scanning
     MAX_FILE_SIZE_MB: int = 30
@@ -95,7 +96,7 @@ class AppConfig:
     DEVICE: str = "auto"
     HISTORY: str = "data/history"
     DOCS_GLOBS: tuple[str, ...] = ("data/raw/*",)
-    DOCS_EXTS: tuple[str, ...] = (".txt", ".md", ".pdf", ".docx", ".html", ".htm", ".csv")
+    DOCS_EXTS: tuple[str, ...] = (".txt", ".md", ".tex", ".pdf", ".doc", ".docx", ".html", ".htm", ".csv", ".xls", ".xlsx", ".xlsm")
     MODEL: ModelConfig = ModelConfig()
     RAG: RagConfig = RagConfig()
 
@@ -143,6 +144,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         INDEX_DIR=str(_get(rag_d, "INDEX_DIR", RagConfig.INDEX_DIR)),
         INDEX_FILE=str(_get(rag_d, "INDEX_FILE", RagConfig.INDEX_FILE)),
         SQLITE_FILE=str(_get(rag_d, "SQLITE_FILE", RagConfig.SQLITE_FILE)),
+        UPLOAD_DIR=str(_get(rag_d, "UPLOAD_DIR", RagConfig.UPLOAD_DIR)),
         MAX_FILE_SIZE_MB=int(_get(rag_d, "MAX_FILE_SIZE_MB", RagConfig.MAX_FILE_SIZE_MB)),
         CHUNK_SIZE=int(_get(rag_d, "CHUNK_SIZE", RagConfig.CHUNK_SIZE)),
         CHUNK_OVERLAP=int(_get(rag_d, "CHUNK_OVERLAP", RagConfig.CHUNK_OVERLAP)),

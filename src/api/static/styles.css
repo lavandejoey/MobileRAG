@@ -103,12 +103,7 @@ body {
 .brand-title {
     font-weight: 700;
     font-size: 15px;
-}
-
-.brand-subtitle {
-    color: var(--muted);
-    font-size: 12px;
-    margin-top: 2px;
+    text-decoration: none;
 }
 
 .status {
@@ -224,6 +219,17 @@ body {
     border-radius: 10px;
     padding: 2px 8px;
     cursor: pointer;
+    min-width: 72px;
+    min-height: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.chat-del:disabled {
+    opacity: 0.78;
+    cursor: default;
 }
 
 /* Chat window */
@@ -274,6 +280,41 @@ body {
     line-height: 1;
 }
 
+.scroll-bottom-btn {
+    position: absolute;
+    left: 50%;
+    bottom: 98px;
+    transform: translateX(-50%);
+    width: 34px;
+    height: 34px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 999px;
+    background: rgba(11, 15, 23, 0.9);
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 12px;
+    line-height: 1;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow);
+    cursor: pointer;
+    z-index: 5;
+    backdrop-filter: blur(10px);
+}
+
+.scroll-bottom-btn.visible {
+    display: inline-flex;
+}
+
+.scroll-bottom-btn:hover {
+    background: rgba(24, 31, 46, 0.96);
+    border-color: rgba(122, 162, 255, 0.42);
+}
+
+.scroll-bottom-btn i {
+    pointer-events: none;
+}
+
 .citation-badge {
     display: inline-flex;
     align-items: center;
@@ -295,6 +336,113 @@ body {
 .citation-badge:hover {
     background: rgba(122, 162, 255, 0.2);
     border-color: rgba(122, 162, 255, 0.55);
+}
+
+.system-toast-host {
+    position: fixed;
+    top: 18px;
+    right: 18px;
+    z-index: 1200;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    pointer-events: none;
+    max-width: min(420px, calc(100vw - 24px));
+}
+
+.system-toast {
+    pointer-events: auto;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(11, 15, 23, 0.92);
+    color: rgba(255, 255, 255, 0.92);
+    border-radius: 10px;
+    box-shadow: var(--shadow);
+    padding: 12px 14px;
+    backdrop-filter: blur(10px);
+}
+
+.system-toast.error {
+    border-color: rgba(255, 95, 115, 0.45);
+}
+
+.system-toast-title {
+    font-size: 12px;
+    font-weight: 700;
+    margin: 0 0 4px 0;
+}
+
+.system-toast-body {
+    font-size: 13px;
+    line-height: 1.4;
+    color: rgba(255, 255, 255, 0.82);
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.upload-strip {
+    display: none;
+    gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+    padding-bottom: 2px;
+    scrollbar-width: thin;
+}
+
+.upload-strip.visible {
+    display: flex;
+}
+
+.upload-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 0 auto;
+    max-width: 240px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.06);
+    color: rgba(255, 255, 255, 0.88);
+    font-size: 12px;
+}
+
+.upload-chip.pending {
+    border-color: rgba(122, 162, 255, 0.35);
+    background: rgba(122, 162, 255, 0.12);
+}
+
+.upload-chip.uploading {
+    border-color: rgba(255, 255, 255, 0.16);
+    background: rgba(255, 255, 255, 0.08);
+}
+
+.upload-chip-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.upload-chip-state {
+    color: rgba(255, 255, 255, 0.58);
+    font-size: 11px;
+}
+
+.upload-chip-remove {
+    border: none;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.68);
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border-radius: 999px;
+    cursor: pointer;
+    line-height: 1;
+}
+
+.upload-chip-remove:hover {
+    color: rgba(255, 255, 255, 0.94);
+    background: rgba(255, 255, 255, 0.08);
 }
 
 .msg {
@@ -392,6 +540,28 @@ body {
 
 .bubble.assistant {
     align-self: flex-start;
+}
+
+.message-upload-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.message-upload-chip {
+    display: inline-flex;
+    align-items: center;
+    max-width: min(100%, 320px);
+    padding: 6px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(122, 162, 255, 0.28);
+    background: rgba(122, 162, 255, 0.1);
+    color: rgba(255, 255, 255, 0.9);
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .answer-block {
@@ -559,6 +729,16 @@ body {
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
     display: none;
+}
+
+.spinner-inline {
+    width: 11px;
+    height: 11px;
+    border-width: 2px;
+}
+
+.spinner-visible {
+    display: inline-block;
 }
 
 @keyframes spin {

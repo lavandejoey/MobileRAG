@@ -60,8 +60,12 @@
         prompt: document.getElementById("prompt"),
         composer: document.getElementById("composer"),
         chatList: document.getElementById("chatList"),
+        scrollToBottomBtn: document.getElementById("scrollToBottomBtn"),
         homeView: document.getElementById("homeView"),
         chatItems: document.getElementById("chatItems"),
+        systemToastHost: document.getElementById("systemToastHost"),
+        uploadStrip: document.getElementById("uploadStrip"),
+        fileInput: document.getElementById("fileInput"),
         newChatBtn: document.getElementById("newChatBtn"),
         statusDot: document.getElementById("statusDot"),
         statusText: document.getElementById("statusText"),
@@ -86,6 +90,10 @@
     let turnAnswerText = "";
     let turnThinkMs = 0;
     let turnCitations = {};
+    let currentUploads = [];
+    let pendingUploadRequests = new Map();
+    let isPreparingSend = false;
+    let deletingChatIds = new Set();
 
     function getChatIdFromPath() {
         const path = window.location.pathname || "/";
@@ -106,21 +114,142 @@
     function clearChatSurface() {
         el.chatList.innerHTML = "";
         resetTurnState();
+        updateScrollBottomButton();
     }
 
     function showHomeView() {
         clearChatSurface();
         el.homeView.classList.add("visible");
         el.homeView.setAttribute("aria-hidden", "false");
+        updateScrollBottomButton();
     }
 
     function hideHomeView() {
         el.homeView.classList.remove("visible");
         el.homeView.setAttribute("aria-hidden", "true");
+        updateScrollBottomButton();
+    }
+
+    function showSystemToast(message, kind = "error", title = "System") {
+        if (!el.systemToastHost) return;
+        const toast = document.createElement("div");
+        toast.className = `system-toast ${kind}`;
+
+        const titleEl = document.createElement("div");
+        titleEl.className = "system-toast-title";
+        titleEl.textContent = title;
+
+        const bodyEl = document.createElement("div");
+        bodyEl.className = "system-toast-body";
+        bodyEl.textContent = message || "";
+
+        toast.appendChild(titleEl);
+        toast.appendChild(bodyEl);
+        el.systemToastHost.appendChild(toast);
+
+        window.setTimeout(() => {
+            toast.remove();
+        }, 4500);
+    }
+
+    function renderUploadStrip() {
+        const items = getPendingUploads();
+        el.uploadStrip.innerHTML = "";
+        if (!items.length) {
+            el.uploadStrip.classList.remove("visible");
+            setActionButtonState();
+            return;
+        }
+        el.uploadStrip.classList.add("visible");
+        for (const item of items) {
+            const chip = document.createElement("div");
+            chip.className = `upload-chip ${item.uploading ? "uploading" : (item.processed ? "processed" : "pending")}`;
+            chip.title = item.rel_path || item.original_name || item.stored_name || "";
+
+            const name = document.createElement("span");
+            name.className = "upload-chip-name";
+            name.textContent = item.original_name || item.stored_name || "file";
+
+            const state = document.createElement("span");
+            state.className = "upload-chip-state";
+            state.textContent = item.uploading ? "uploading" : (item.processed ? "ready" : "uploaded");
+
+            const removeBtn = document.createElement("button");
+            removeBtn.className = "upload-chip-remove";
+            removeBtn.type = "button";
+            removeBtn.setAttribute("aria-label", `Remove ${name.textContent}`);
+            removeBtn.textContent = "×";
+            removeBtn.disabled = !!item.uploading;
+            removeBtn.addEventListener("click", async () => {
+                try {
+                    await deleteUploadedFile(item.upload_id);
+                } catch (err) {
+                    showSystemToast(`Upload error: ${err.message || "unknown"}`, "error", "Upload Error");
+                }
+            });
+
+            chip.appendChild(name);
+            chip.appendChild(state);
+            chip.appendChild(removeBtn);
+            el.uploadStrip.appendChild(chip);
+        }
+        setActionButtonState();
+    }
+
+    function getPendingUploads() {
+        return (currentUploads || []).filter((item) => !item.attached_msg_id);
+    }
+
+    function hasUploadsInFlight() {
+        return pendingUploadRequests.size > 0;
+    }
+
+    async function refreshUploads(chatId) {
+        if (!chatId) {
+            currentUploads = [];
+            renderUploadStrip();
+            return;
+        }
+        const r = await fetch(`${apiBase()}/v1/chats/${chatId}/uploads`, {cache: "no-store"});
+        if (!r.ok) {
+            currentUploads = [];
+            renderUploadStrip();
+            return;
+        }
+        currentUploads = await r.json();
+        renderUploadStrip();
+    }
+
+    async function deleteUploadedFile(uploadId) {
+        if (!selectedChatId || !uploadId) return;
+        const r = await fetch(`${apiBase()}/v1/chats/${selectedChatId}/uploads/${uploadId}`, {
+            method: "DELETE",
+        });
+        if (!r.ok) {
+            const data = await r.json().catch(() => ({}));
+            throw new Error(data.detail || "failed to delete upload");
+        }
+        await refreshUploads(selectedChatId);
+    }
+
+    async function ensureDraftChat() {
+        if (selectedChatId) return selectedChatId;
+        const r = await fetch(`${apiBase()}/v1/chats`, {method: "POST"});
+        if (!r.ok) throw new Error("failed to create chat");
+        const data = await r.json();
+        selectedChatId = data.chat_id || "";
+        if (!selectedChatId) throw new Error("missing chat id");
+        localStorage.setItem("mr_selected_chat_id", selectedChatId);
+        navigateToChat(selectedChatId, false);
+        hideHomeView();
+        await refreshChatList();
+        await refreshUploads(selectedChatId);
+        return selectedChatId;
     }
 
     function flushFinalAnswerRender() {
         if (!currentAssistant) return;
+        const shouldStickToBottom = isNearBottom();
         let ans = currentAssistant.bubble.querySelector(".answer-block");
         if (!ans) {
             ans = document.createElement("div");
@@ -129,7 +258,8 @@
         }
         ans.innerHTML = renderAnswerHtml(turnAnswerText, turnCitations);
         renderMathInElementSafe(ans);
-        scrollToBottom();
+        if (shouldStickToBottom) scrollToBottom();
+        else updateScrollBottomButton();
     }
 
     function setTurnCitations(citations) {
@@ -142,13 +272,24 @@
     }
 
     function replaceCitationTokens(html, citations) {
-        return String(html || "").replace(/\[(F\d+)\]/g, (full, id) => {
-            const item = citations[id];
+        const citationKeys = Object.keys(citations || {});
+        return String(html || "").replace(/\[([A-Z0-9]{2,12})\]/g, (full, id) => {
+            let item = citations[id];
+            if (!item) {
+                const alias = id.match(/^F(\d+)$/);
+                if (alias) {
+                    const idx = Number(alias[1]) - 1;
+                    if (idx >= 0 && idx < citationKeys.length) {
+                        item = citations[citationKeys[idx]];
+                    }
+                }
+            }
             if (!item) return full;
             const title = item.name || id;
             const openUrl = item.open_url || "#";
             const label = compactCitationLabel(title);
-            return `<a class="citation-badge" href="${openUrl}" target="_blank" rel="noopener noreferrer" title="${title}">${escapeHtml(label)}</a>`;
+            const detail = item.source_label ? `${item.path}\n${item.source_label}` : (item.path || title);
+            return `<a class="citation-badge" href="${openUrl}" target="_blank" rel="noopener noreferrer" title="${escapeHtml(detail)}">${escapeHtml(label)}</a>`;
         });
     }
 
@@ -165,6 +306,34 @@
         const ext = dot > 0 ? base.slice(dot) : "";
         const cleanStem = stem.length > 18 ? `${stem.slice(0, 18).trim()}…` : stem;
         return `${cleanStem}${ext}`;
+    }
+
+    function renderMessageUploads(uploads) {
+        if (!uploads || !uploads.length) return null;
+        const wrap = document.createElement("div");
+        wrap.className = "message-upload-list";
+        for (const item of uploads) {
+            const chip = document.createElement("div");
+            chip.className = "message-upload-chip";
+            chip.title = item.rel_path || item.original_name || item.stored_name || "";
+            chip.textContent = item.original_name || item.stored_name || "file";
+            wrap.appendChild(chip);
+        }
+        return wrap;
+    }
+
+    function markUploadsAsSent(uploadIds) {
+        if (!uploadIds || !uploadIds.length) return;
+        const sentIds = new Set(uploadIds.map((id) => String(id)));
+        currentUploads = (currentUploads || []).map((item) => {
+            if (!sentIds.has(String(item.upload_id))) return item;
+            return {
+                ...item,
+                attached_msg_id: item.attached_msg_id || "sending",
+                uploading: false,
+            };
+        });
+        renderUploadStrip();
     }
 
     function epochSecToLocale(tsSec) {
@@ -201,10 +370,11 @@
             return;
         }
 
+        const hasPendingUploads = getPendingUploads().length > 0;
         el.actionBtn.classList.remove("stop");
         el.actionBtn.setAttribute("aria-label", "Send");
         el.actionIcon.textContent = "➤";
-        el.actionBtn.disabled = text.length === 0;
+        el.actionBtn.disabled = isPreparingSend || (text.length === 0 && !hasPendingUploads);
     }
 
     function setBusy(v) {
@@ -220,6 +390,20 @@
 
     function scrollToBottom() {
         el.chatList.scrollTop = el.chatList.scrollHeight;
+        updateScrollBottomButton();
+    }
+
+    function isNearBottom(threshold = 56) {
+        const remaining = el.chatList.scrollHeight - el.chatList.scrollTop - el.chatList.clientHeight;
+        return remaining <= threshold;
+    }
+
+    function updateScrollBottomButton() {
+        if (!el.scrollToBottomBtn) return;
+        const shouldShow = !el.homeView.classList.contains("visible")
+            && el.chatList.childElementCount > 0
+            && !isNearBottom();
+        el.scrollToBottomBtn.classList.toggle("visible", shouldShow);
     }
 
     function closeWs() {
@@ -230,6 +414,10 @@
             }
         }
         ws = null;
+    }
+
+    function shouldIgnoreResumeError(errorText) {
+        return errorText === "no_active_turn";
     }
 
     /* =========================
@@ -306,7 +494,8 @@
        Message rendering
        ========================= */
 
-    function addMessage(role, text, badgeText) {
+    function addMessage(role, text, badgeText, uploads = []) {
+        const shouldStickToBottom = isNearBottom();
         const wrap = document.createElement("div");
         wrap.className = "msg";
 
@@ -332,13 +521,23 @@
 
         const bubble = document.createElement("div");
         bubble.className = `bubble ${role}`;
-        bubble.textContent = text || "";
+        const uploadList = renderMessageUploads(uploads);
+        if (uploadList) {
+            bubble.appendChild(uploadList);
+        }
+        if (text) {
+            const textBlock = document.createElement("div");
+            textBlock.className = "message-text";
+            textBlock.textContent = text;
+            bubble.appendChild(textBlock);
+        }
 
         wrap.appendChild(meta);
         wrap.appendChild(bubble);
 
         el.chatList.appendChild(wrap);
-        scrollToBottom();
+        if (shouldStickToBottom) scrollToBottom();
+        else updateScrollBottomButton();
 
         return {wrap, meta, badge, time, bubble, thinkHintEl};
     }
@@ -387,9 +586,16 @@
             const del = document.createElement("button");
             del.className = "chat-del";
             del.type = "button";
-            del.textContent = "Delete";
+            const isDeleting = deletingChatIds.has(c.chat_id);
+            if (isDeleting) {
+                del.disabled = true;
+                del.innerHTML = '<span class="spinner spinner-inline spinner-visible" aria-hidden="true"></span><span>Deleting</span>';
+            } else {
+                del.textContent = "Delete";
+            }
             del.addEventListener("click", async (e) => {
                 e.stopPropagation();
+                if (deletingChatIds.has(c.chat_id)) return;
                 await deleteChat(c.chat_id);
             });
 
@@ -408,15 +614,23 @@
     }
 
     async function deleteChat(chatId) {
-        await fetch(`${apiBase()}/v1/chats/${chatId}`, {method: "DELETE"});
-
-        if (selectedChatId === chatId) {
-            selectedChatId = "";
-            localStorage.removeItem("mr_selected_chat_id");
-            navigateToChat("", false);
-            showHomeView();
-        }
+        deletingChatIds.add(chatId);
         await refreshChatList();
+        try {
+            await fetch(`${apiBase()}/v1/chats/${chatId}`, {method: "DELETE"});
+
+            if (selectedChatId === chatId) {
+                selectedChatId = "";
+                localStorage.removeItem("mr_selected_chat_id");
+                navigateToChat("", false);
+                currentUploads = [];
+                renderUploadStrip();
+                showHomeView();
+            }
+        } finally {
+            deletingChatIds.delete(chatId);
+            await refreshChatList();
+        }
     }
 
     function attachThinkHintToAssistantMsg(assistantMsg, thinkText, metaObj) {
@@ -434,71 +648,64 @@
 
     async function selectChat(chatId, options = {}) {
         const {updateHistory = true, replaceHistory = false} = options;
+        closeWs();
         selectedChatId = chatId;
         localStorage.setItem("mr_selected_chat_id", selectedChatId);
         if (updateHistory) navigateToChat(chatId, replaceHistory);
 
         hideHomeView();
         clearChatSurface();
+        await refreshUploads(chatId);
 
         const r = await fetch(`${apiBase()}/v1/chats/${chatId}/messages?limit=2000`, {cache: "no-store"});
         if (!r.ok) {
             selectedChatId = "";
             localStorage.removeItem("mr_selected_chat_id");
             navigateToChat("", true);
+            currentUploads = [];
+            renderUploadStrip();
             showHomeView();
             await refreshChatList();
             return;
         }
         const msgs = await r.json();
 
-        // Rebuild UI from DB:
-        let pendingThink = null;
-        let pendingMeta = null;
-
-        let lastAssistantMsg = null;
-        let lastAssistantThink = null;
+        const thinkByTurn = new Map();
+        const metaByTurn = new Map();
 
         for (const m of msgs) {
             if (m.role === "user") {
-                addMessage("user", m.content, "YOU");
+                addMessage("user", m.content, "YOU", m.uploads || []);
                 continue;
             }
 
             if (m.role === "assistant_think") {
-                const thinkText = m.content || "";
-                pendingThink = thinkText;
-
-                // If DB order is assistant -> assistant_think, attach retroactively
-                if (thinkText && lastAssistantMsg && (!lastAssistantThink)) {
-                    lastAssistantThink = thinkText;
-                    attachThinkHintToAssistantMsg(lastAssistantMsg, thinkText, pendingMeta);
+                if (m.turn_id) {
+                    thinkByTurn.set(m.turn_id, m.content || "");
                 }
                 continue;
             }
 
             if (m.role === "meta") {
                 try {
-                    pendingMeta = JSON.parse(m.content || "{}");
-                    // If meta arrives after assistant, update label if already attached
-                    if (lastAssistantMsg && lastAssistantThink) {
-                        attachThinkHintToAssistantMsg(lastAssistantMsg, lastAssistantThink, pendingMeta);
+                    if (m.turn_id) {
+                        metaByTurn.set(m.turn_id, JSON.parse(m.content || "{}"));
                     }
                 } catch (_) {
-                    pendingMeta = null;
+                    if (m.turn_id) {
+                        metaByTurn.set(m.turn_id, null);
+                    }
                 }
                 continue;
             }
 
             if (m.role === "assistant") {
                 const assistantMsg = addMessage("assistant", "", "ASSISTANT");
-                lastAssistantMsg = assistantMsg;
-                lastAssistantThink = null;
+                const turnThink = m.turn_id ? (thinkByTurn.get(m.turn_id) || "") : "";
+                const turnMeta = m.turn_id ? metaByTurn.get(m.turn_id) : null;
 
-                // attach think hint if we already have think
-                if (pendingThink) {
-                    lastAssistantThink = pendingThink;
-                    attachThinkHintToAssistantMsg(assistantMsg, pendingThink, pendingMeta);
+                if (turnThink) {
+                    attachThinkHintToAssistantMsg(assistantMsg, turnThink, turnMeta);
                 }
 
                 // answer content
@@ -506,20 +713,21 @@
                 answer.className = "answer-block";
                 // Render markdown + TeX on reload (IMPORTANT)
                 const raw = m.content || "";
-                const citations = ((pendingMeta && pendingMeta.citations) || []).reduce((acc, item) => {
+                const citations = (((turnMeta && turnMeta.citations) || [])).reduce((acc, item) => {
                     if (item && item.citation_id) acc[item.citation_id] = item;
                     return acc;
                 }, {});
                 answer.innerHTML = renderAnswerHtml(raw, citations);
                 renderMathInElementSafe(answer);
                 assistantMsg.bubble.appendChild(answer);
-
-                pendingThink = null;
-                pendingMeta = null;
             }
         }
 
         await refreshChatList();
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => scrollToBottom());
+        });
+        await maybeResumeTurn(chatId);
     }
 
     /* =========================
@@ -546,14 +754,17 @@
        WS streaming
        ========================= */
 
-    function startWsStream(message) {
+    function startWsStream(message, pendingUploads = []) {
         closeWs();
         resetTurnState();
         hideHomeView();
         setBusy(true);
+        markUploadsAsSent(pendingUploads.map((item) => item.upload_id));
 
         // optimistic UI user message
-        addMessage("user", message, "YOU");
+        if (message || pendingUploads.length) {
+            addMessage("user", message, "YOU", pendingUploads);
+        }
         el.prompt.value = "";
         clampPromptHeight();
         setActionButtonState();
@@ -588,7 +799,7 @@
 
             if (ev === "stage") {
                 const stage = obj.stage || "";
-                if (stage === "preparing" || stage === "retrieval") {
+                if (stage === "preparing" || stage === "parsing" || stage === "retrieval") {
                     const assistantMsg = ensureAssistantMessage();
                     setThinkHintThinking(assistantMsg.thinkHintEl);
                 }
@@ -597,6 +808,11 @@
 
             if (ev === "rag") {
                 setTurnCitations(obj.citations || []);
+                return;
+            }
+
+            if (ev === "uploads_processed") {
+                refreshUploads(selectedChatId);
                 return;
             }
 
@@ -639,9 +855,11 @@
                 }
                 // Render Markdown + TeX (throttled)
                 scheduleRender(() => {
+                    const shouldStickToBottom = isNearBottom();
                     ans.innerHTML = renderAnswerHtml(turnAnswerText, turnCitations);
                     renderMathInElementSafe(ans);
-                    scrollToBottom();
+                    if (shouldStickToBottom) scrollToBottom();
+                    else updateScrollBottomButton();
                 });
                 return;
             }
@@ -657,28 +875,163 @@
             if (ev === "error") {
                 setBusy(false);
                 closeWs();
-                addMessage("system", `Error: ${obj.error || "unknown"}`, "SYSTEM");
+                refreshUploads(selectedChatId);
+                if (!shouldIgnoreResumeError(obj.error || "")) {
+                    showSystemToast(`Error: ${obj.error || "unknown"}`, "error", "Chat Error");
+                }
             }
         };
 
         ws.onerror = () => {
             setBusy(false);
             closeWs();
-            addMessage("system", "WebSocket error.", "SYSTEM");
+            refreshUploads(selectedChatId);
+            showSystemToast("WebSocket error.", "error", "Connection Error");
         };
 
         ws.onclose = () => {
             flushFinalAnswerRender();
             setBusy(false);
+            if (selectedChatId) {
+                refreshUploads(selectedChatId);
+            }
             // closeWs();
         };
     }
 
-    function trySend() {
-        if (isBusy) return;
+    async function waitForPendingUploads() {
+        if (!hasUploadsInFlight()) return;
+        await Promise.allSettled(Array.from(pendingUploadRequests.values()));
+        if (selectedChatId) {
+            await refreshUploads(selectedChatId);
+        }
+    }
+
+    async function maybeResumeTurn(chatId) {
+        if (!chatId || isBusy) return;
+        closeWs();
+        resetTurnState();
+        ws = new WebSocket(wsUrl());
+        ws.onopen = () => {
+            ws.send(JSON.stringify({
+                session_id: "default",
+                chat_id: chatId,
+                message: "",
+            }));
+        };
+        ws.onmessage = (evt) => {
+            let obj;
+            try {
+                obj = JSON.parse(evt.data);
+            } catch (_) {
+                return;
+            }
+            const ev = obj.event;
+            if (ev === "error") {
+                if (!shouldIgnoreResumeError(obj.error || "")) {
+                    showSystemToast(`Error: ${obj.error || "unknown"}`, "error", "Chat Error");
+                }
+                closeWs();
+                return;
+            }
+            if (ev === "chat_created") return;
+            if (ev === "stage") {
+                setBusy(true);
+                const stage = obj.stage || "";
+                if (stage === "preparing" || stage === "parsing" || stage === "retrieval") {
+                    const assistantMsg = ensureAssistantMessage();
+                    setThinkHintThinking(assistantMsg.thinkHintEl);
+                }
+                return;
+            }
+            if (ev === "rag") {
+                setTurnCitations(obj.citations || []);
+                return;
+            }
+            if (ev === "uploads_processed") {
+                refreshUploads(chatId);
+                return;
+            }
+            if (ev === "think_start") {
+                setBusy(true);
+                const assistantMsg = ensureAssistantMessage();
+                setThinkHintThinking(assistantMsg.thinkHintEl);
+                return;
+            }
+            if (ev === "think_token") {
+                turnThinkText += obj.token || "";
+                return;
+            }
+            if (ev === "think_end") {
+                turnThinkMs = Number(obj.think_ms || 0);
+                const assistantMsg = ensureAssistantMessage();
+                setThinkHintDone(assistantMsg.thinkHintEl, turnThinkMs, () => {
+                    openThinkDrawer(
+                        turnThinkMs > 0 ? `Thinking (${(turnThinkMs / 1000).toFixed(2)}s)` : "Thinking",
+                        turnThinkText
+                    );
+                });
+                return;
+            }
+            if (ev === "answer_token") {
+                setBusy(true);
+                turnAnswerText += obj.token || "";
+                const assistantMsg = ensureAssistantMessage();
+                let ans = assistantMsg.bubble.querySelector(".answer-block");
+                if (!ans) {
+                    ans = document.createElement("div");
+                    ans.className = "answer-block";
+                    assistantMsg.bubble.appendChild(ans);
+                }
+                scheduleRender(() => {
+                    const shouldStickToBottom = isNearBottom();
+                    ans.innerHTML = renderAnswerHtml(turnAnswerText, turnCitations);
+                    renderMathInElementSafe(ans);
+                    if (shouldStickToBottom) scrollToBottom();
+                    else updateScrollBottomButton();
+                });
+                return;
+            }
+            if (ev === "done") {
+                flushFinalAnswerRender();
+                setBusy(false);
+                refreshChatList();
+                closeWs();
+            }
+        };
+        ws.onerror = () => {
+            closeWs();
+        };
+        ws.onclose = () => {
+            flushFinalAnswerRender();
+            if (!isBusy) setActionButtonState();
+        };
+    }
+
+    async function trySend() {
+        if (isBusy || isPreparingSend) return;
         const text = (el.prompt.value || "").trim();
-        if (!text) return;
-        startWsStream(text);
+        const pendingUploads = getPendingUploads();
+        if (!text && !pendingUploads.length) return;
+        isPreparingSend = true;
+        setActionButtonState();
+        try {
+            if (hasUploadsInFlight()) {
+                setStatus("dot-conn", "Finishing uploads...");
+                await waitForPendingUploads();
+            }
+            const readyUploads = getPendingUploads();
+            if (!text && !readyUploads.length) {
+                setStatus("dot-idle", "Idle");
+                return;
+            }
+            startWsStream(text, readyUploads);
+        } finally {
+            isPreparingSend = false;
+            if (!isBusy) {
+                setActionButtonState();
+            }
+        }
     }
 
     function onStop() {
@@ -686,6 +1039,58 @@
         try {
             ws.close();
         } catch (_) {
+        }
+    }
+
+    async function uploadSelectedFile(file) {
+        if (!file) return;
+        const chatId = await ensureDraftChat();
+        const tempId = `temp-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+        currentUploads = currentUploads.concat([{
+            upload_id: tempId,
+            chat_id: chatId,
+            original_name: file.name || "file",
+            stored_name: file.name || "file",
+            rel_path: "",
+            processed: false,
+            attached_msg_id: null,
+            uploading: true,
+        }]);
+        renderUploadStrip();
+        const fd = new FormData();
+        fd.append("file", file);
+        setStatus("dot-think", "Uploading...");
+        const uploadPromise = (async () => {
+            const r = await fetch(`${apiBase()}/v1/chats/${chatId}/uploads`, {
+                method: "POST",
+                body: fd,
+            });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok) {
+                throw new Error(data.detail || "upload failed");
+            }
+            await refreshUploads(chatId);
+            await refreshChatList();
+        })();
+        pendingUploadRequests.set(tempId, uploadPromise);
+        try {
+            await uploadPromise;
+            if (!isPreparingSend && !isBusy) {
+                setStatus("dot-idle", "Idle");
+            }
+        } catch (err) {
+            currentUploads = currentUploads.filter((item) => item.upload_id !== tempId);
+            renderUploadStrip();
+            setStatus("dot-err", "Upload failed");
+            showSystemToast(`Upload error: ${err.message || "unknown"}`, "error", "Upload Error");
+            throw err;
+        } finally {
+            pendingUploadRequests.delete(tempId);
+            if (selectedChatId && !hasUploadsInFlight() && !isBusy && !isPreparingSend) {
+                await refreshUploads(selectedChatId);
+            }
+            if (el.fileInput) el.fileInput.value = "";
+            setActionButtonState();
         }
     }
 
@@ -704,10 +1109,31 @@
         else trySend();
     });
 
+    el.attachBtn.addEventListener("click", () => {
+        if (isBusy) return;
+        el.fileInput.click();
+    });
+
+    el.fileInput.addEventListener("change", async (e) => {
+        const file = e.target.files && e.target.files[0];
+        try {
+            await uploadSelectedFile(file);
+        } catch (_) {
+        }
+    });
+
+    el.chatList.addEventListener("scroll", updateScrollBottomButton);
+    el.scrollToBottomBtn.addEventListener("click", () => {
+        scrollToBottom();
+    });
+
     el.newChatBtn.addEventListener("click", async () => {
+        closeWs();
         selectedChatId = "";
         localStorage.removeItem("mr_selected_chat_id");
         navigateToChat("", false);
+        currentUploads = [];
+        renderUploadStrip();
         showHomeView();
         await refreshChatList();
         setStatus("dot-idle", "Idle");
@@ -715,12 +1141,15 @@
 
     window.addEventListener("popstate", async () => {
         const chatId = getChatIdFromPath();
+        closeWs();
         selectedChatId = chatId;
         if (chatId) {
             localStorage.setItem("mr_selected_chat_id", chatId);
             await selectChat(chatId, {updateHistory: false});
         } else {
             localStorage.removeItem("mr_selected_chat_id");
+            currentUploads = [];
+            renderUploadStrip();
             await refreshChatList();
             showHomeView();
         }
@@ -749,6 +1178,8 @@
         if (selectedChatId) {
             await selectChat(selectedChatId, {updateHistory: false});
         } else {
+            currentUploads = [];
+            renderUploadStrip();
             showHomeView();
         }
         setActionButtonState();

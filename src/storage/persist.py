@@ -11,6 +11,7 @@ src/storage/persist.py
 from __future__ import annotations
 
 import json
+import uuid
 from typing import Dict, Any
 
 from src.storage.history_db import HistoryDB
@@ -23,7 +24,8 @@ def persist_turn(
         assistant_think: str,
         meta: Dict[str, Any],
 ) -> None:
+    turn_id = str(uuid.uuid4())
     if assistant_think:
-        db.add_message(chat_id=chat_id, role="assistant_think", content=assistant_think)
-    db.add_message(chat_id=chat_id, role="meta", content=json.dumps(meta, ensure_ascii=False))
-    db.add_message(chat_id=chat_id, role="assistant", content=assistant_answer)
+        db.add_message(chat_id=chat_id, role="assistant_think", content=assistant_think, turn_id=turn_id)
+    db.add_message(chat_id=chat_id, role="meta", content=json.dumps(meta, ensure_ascii=False), turn_id=turn_id)
+    db.add_message(chat_id=chat_id, role="assistant", content=assistant_answer, turn_id=turn_id)

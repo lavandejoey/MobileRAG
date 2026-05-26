@@ -12,6 +12,7 @@ License: Apache-2.0
     <meta name="viewport" content="width=device-width, initial-scale=1"/>
     <title>MobileRAG Chat</title>
     <link rel="stylesheet" href="/static/styles.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css"/>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
 </head>
 
@@ -20,7 +21,7 @@ License: Apache-2.0
     <!-- Top bar -->
     <header class="topbar">
         <div class="brand">
-            <div class="brand-title">MobileRAG Chat</div>
+            <div class="brand-title"><a href="/">MobileRAG Chat</a></div>
         </div>
 
         <div class="status">
@@ -43,17 +44,21 @@ License: Apache-2.0
         <!-- Chat -->
         <main class="chat">
             <div id="chatList" class="chat-list"></div>
+            <button id="scrollToBottomBtn" class="scroll-bottom-btn" type="button" aria-label="Scroll to bottom">
+                <i class="fa-solid fa-chevron-down" aria-hidden="true"></i>
+            </button>
             <div id="homeView" class="home-view" aria-hidden="true">
                 <h1>MobileRAG</h1>
             </div>
 
             <form id="composer" class="composer" autocomplete="off">
                 <div class="composer-box">
+                    <div id="uploadStrip" class="upload-strip" aria-live="polite"></div>
                     <textarea id="prompt" class="composer-input" placeholder="Type your message..." rows="1"></textarea>
+                    <input id="fileInput" type="file" hidden/>
 
                     <div class="composer-row">
-                        <!-- Placeholder only, no implementation yet -->
-                        <button id="attachBtn" class="icon-btn ghost" type="button" aria-label="Attach file" disabled>
+                        <button id="attachBtn" class="icon-btn ghost" type="button" aria-label="Attach file">
                             <span class="icon" aria-hidden="true">📎</span>
                         </button>
 
@@ -68,6 +73,8 @@ License: Apache-2.0
         </main>
     </div>
 </div>
+
+<div id="systemToastHost" class="system-toast-host" aria-live="polite" aria-atomic="true"></div>
 
 <!-- Thinking drawer overlay (click outside to close) -->
 <div id="thinkOverlay" class="think-drawer-overlay" aria-hidden="true"></div>

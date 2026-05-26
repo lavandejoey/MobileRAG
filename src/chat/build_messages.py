@@ -41,11 +41,18 @@ def build_llm_messages(
         db: HistoryDB,
         chat_id: str,
         rag_context: str = "",
+        response_mode: str = "default",
 ) -> List[Message]:
     past = db.get_messages(chat_id=chat_id, limit=2000)
     history_msgs = [{"role": m.role, "content": m.content} for m in past if m.role in ("user", "assistant")]
 
     sys_content = SYSTEM_PROMPT
+    if response_mode == "simple":
+        sys_content += (
+            "\n\n## Response Mode\n"
+            "This is a simple user request. Answer directly in 1-3 short sentences. "
+            "Do not expose long internal reasoning. Do not add unnecessary analysis."
+        )
     if rag_context.strip():
         sys_content = sys_content + "\n\n## Retrieval Augmented Context\n" + rag_context.strip()
 

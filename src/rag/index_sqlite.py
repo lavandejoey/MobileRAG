@@ -124,6 +124,14 @@ class RagSqliteStore:
         with self._conn() as conn:
             conn.execute("DELETE FROM chunks WHERE doc_id=?", (doc_id,))
 
+    def list_chunk_ids_for_doc(self, doc_id: str) -> List[str]:
+        with self._conn() as conn:
+            rows = conn.execute(
+                "SELECT chunk_id FROM chunks WHERE doc_id=? ORDER BY idx ASC",
+                (doc_id,),
+            ).fetchall()
+        return [str(row["chunk_id"]) for row in rows]
+
     def delete_doc(self, doc_id: str) -> None:
         with self._conn() as conn:
             conn.execute("DELETE FROM chunks WHERE doc_id=?", (doc_id,))
@@ -172,6 +180,28 @@ class RagSqliteStore:
             r = by_id.get(cid)
             if not r:
                 continue
+            out.append(
+                ChunkRecord(
+                    chunk_id=r["chunk_id"],
+                    doc_id=r["doc_id"],
+                    path=r["path"],
+                    idx=int(r["idx"]),
+                    start=int(r["start"]),
+                    end=int(r["end"]),
+                    text=r["text"],
+                    source_label=r["source_label"],
+                )
+            )
+        return out
+
+    def get_chunks_for_doc_ids(self, doc_ids: List[str]) -> List[ChunkRecord]:
+        if not doc_ids:
+            return []
+        q = "SELECT * FROM chunks WHERE doc_id IN (%s) ORDER BY doc_id, idx ASC" % (",".join(["?"] * len(doc_ids)))
+        with self._conn() as conn:
+            rows = conn.execute(q, tuple(doc_ids)).fetchall()
+        out: List[ChunkRecord] = []
+        for r in rows:
             out.append(
                 ChunkRecord(
                     chunk_id=r["chunk_id"],
